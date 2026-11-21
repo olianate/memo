@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Per-user MSI for memo. Built with WiX Toolset 3.14 in CI:
+    candle.exe -arch x64 -dVersion=1.0.0 -dSourceDir=... -dIconPath=... memo.wxs
+    light.exe -ext WixUIExtension memo.wixobj -out memo-windows-amd64.msi
+
+  The package installs into %LOCALAPPDATA%\Programs\memo, so it needs no admin
+  prompt, and creates Start Menu and desktop shortcuts. Uninstalling keeps
+  %APPDATA%\memo (notes, attachments and settings) by design.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*"
+           Name="memo"
+           Language="1033"
+           Version="$(var.Version)"
+           Manufacturer="memo"
+           UpgradeCode="194DB142-4D91-4730-82C9-859DC8D495F6">
+    <Package InstallerVersion="500"
+             Compressed="yes"
+             InstallScope="perUser"
+             Platform="x64" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of memo is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="AppIcon" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+    <Property Id="ARPCOMMENTS" Value="Local-first memos with a Notion archive" />
+
+    <!-- Per-user install: no UAC, uninstall keeps the data directory. -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="ProgramsFolder" Name="Programs">
+          <Directory Id="INSTALLFOLDER" Name="memo" />
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="memo" />
+      </Directory>
+      <Directory Id="DesktopFolder" />
+    </Directory>
+
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="MainExecutable" Guid="671CFB56-2625-4B66-8D30-5D8AC2963CA4">
+        <File Id="MemoExe" Source="$(var.SourceDir)\memo.exe">
+          <Shortcut Id="StartMenuShortcut"
+                    Directory="ApplicationProgramsFolder"
+                    Name="memo"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Icon="AppIcon"
+                    Advertise="no" />
+          <Shortcut Id="DesktopShortcut"
+                    Directory="DesktopFolder"
+                    Name="memo"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Icon="AppIcon"
+                    Advertise="no" />
+        </File>
+        <!-- HKCU keypath keeps the per-user component valid under ICE38. -->
+        <RegistryValue Root="HKCU"
+                       Key="Software\memo"
+                       Name="installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+        <RemoveFolder Id="RemoveInstallFolder"
+                      Directory="INSTALLFOLDER"
+                      On="uninstall" />
+        <RemoveFolder Id="RemoveProgramsFolder"
+                      Directory="ProgramsFolder"
+                      On="uninstall" />
+        <RemoveFolder Id="RemoveApplicationProgramsFolder"
+                      Directory="ApplicationProgramsFolder"
+                      On="uninstall" />
+      </Component>
+    </DirectoryRef>
+
+    <Feature Id="MainFeature" Title="memo" Level="1">
+      <ComponentRef Id="MainExecutable" />
+    </Feature>
+
+    <UIRef Id="WixUI_Minimal" />
+  </Product>
+</Wix>

@@ -1,0 +1,30 @@
+# Normalize text files to LF so Windows checkouts do not create spurious diffs
+# (notably for tool-generated files such as frontend/bindings).
+* text=auto eol=lf
+
+# Windows batch files are the one text format that needs CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets: never convert or diff.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.car binary
+*.pdf binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.exe binary
+*.dll binary
+*.syso binary
+*.dmg binary
+*.zip binary
+*.db binary
+*.sqlite binary
+*.wasm binary

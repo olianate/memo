@@ -1,0 +1,46 @@
+# Build output
+.task/
+.wails/
+bin/
+**/dist/
+**/coverage/
+**/.vite/
+**/*.syso
+
+# Node dependencies
+frontend/node_modules/
+
+# Local workspace and agent files (never commit)
+.scratch/
+probes/
+prototype/
+patches/
+.agents/
+AGENTS.md
+**/AGENTS.md
+docs/agents/
+skills-lock.json
+
+# The vendored Wails CLI embeds its setup-wizard frontend at compile time.
+!third_party/wails/internal/setupwizard/frontend/dist/
+!third_party/wails/internal/setupwizard/frontend/dist/**
+
+# Vendored Wails: examples and generator test fixtures are not needed to build
+third_party/wails/examples/
+third_party/wails/internal/generator/testdata/
+
+# Generated Wails installer bootstrapper
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+
+# Logs and local secrets
+**/*.log
+**/*.tmp
+**/.env
+**/.env.*
+!**/.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

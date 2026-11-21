@@ -1,0 +1,46 @@
+{
+  "fill" : {
+    "linear-gradient" : [
+      "extended-srgb:0.20392,0.82745,0.60000,1.00000",
+      "extended-srgb:0.08627,0.63922,0.29020,1.00000"
+    ],
+    "orientation" : {
+      "start" : {
+        "x" : 0.1,
+        "y" : 0.0
+      },
+      "stop" : {
+        "x" : 0.9,
+        "y" : 1.0
+      }
+    }
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "memo_glyph.png",
+          "name" : "memo",
+          "position" : {
+            "scale" : 1.0,
+            "translation-in-points" : [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.35
+      },
+      "specular" : true
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
