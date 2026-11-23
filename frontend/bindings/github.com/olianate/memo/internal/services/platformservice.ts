@@ -14,56 +14,56 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
  * CurrentTheme is read by the frontend before the first paint.
  */
 export function CurrentTheme(): $CancellablePromise<string> {
-    return $Call.ByID(445108518);
+    return $Call.ByID(1246846139);
 }
 
 /**
  * HideSticky hides quick capture without losing the draft.
  */
 export function HideSticky(): $CancellablePromise<void> {
-    return $Call.ByID(2449232615);
+    return $Call.ByID(977191890);
 }
 
 /**
  * Quit exits the app.
  */
 export function Quit(): $CancellablePromise<void> {
-    return $Call.ByID(1524839123);
+    return $Call.ByID(2453886070);
 }
 
 /**
  * SaveStickyPosition persists the sticky window position.
  */
 export function SaveStickyPosition(x: number, y: number): $CancellablePromise<void> {
-    return $Call.ByID(117608281, x, y);
+    return $Call.ByID(428187360, x, y);
 }
 
 /**
  * ShowMain brings the main window forward.
  */
 export function ShowMain(): $CancellablePromise<void> {
-    return $Call.ByID(1675780960);
+    return $Call.ByID(3946024969);
 }
 
 /**
  * ShowSettings brings the main window forward and opens settings.
  */
 export function ShowSettings(): $CancellablePromise<void> {
-    return $Call.ByID(3392204592);
+    return $Call.ByID(201000993);
 }
 
 /**
  * ShowSticky summons quick capture.
  */
 export function ShowSticky(): $CancellablePromise<void> {
-    return $Call.ByID(3769141266);
+    return $Call.ByID(3637526847);
 }
 
 /**
  * StickyPosition returns the remembered sticky position.
  */
 export function StickyPosition(): $CancellablePromise<[number, number]> {
-    return $Call.ByID(2937391284);
+    return $Call.ByID(849216997);
 }
 
 /**
@@ -71,5 +71,5 @@ export function StickyPosition(): $CancellablePromise<[number, number]> {
  * created before the frontend was ready.
  */
 export function TakePendingView(): $CancellablePromise<string> {
-    return $Call.ByID(1608254663);
+    return $Call.ByID(1150797764);
 }

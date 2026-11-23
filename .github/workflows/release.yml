@@ -226,6 +226,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [windows, macos]
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -237,23 +239,32 @@ jobs:
           ls -lh
           sha256sum * > SHA256SUMS.txt
 
+      - name: Compose release notes
+        run: |
+          set -euo pipefail
+          notes="docs/releases/${GITHUB_REF_NAME}.md"
+          out="$RUNNER_TEMP/release-notes.md"
+          {
+            printf 'memo %s — 本地优先的桌面速记，可选归档到 Notion。\n\n' "$GITHUB_REF_NAME"
+            if [ -f "$notes" ]; then
+              cat "$notes"
+            else
+              printf '本次发布包含常规改进和修复。\n'
+            fi
+            printf '\n**Windows**\n'
+            printf '%s\n' '- `memo-windows-amd64.msi`：推荐，按用户安装，无需管理员权限。'
+            printf '%s\n' '- `memo-windows-amd64-installer.exe`：NSIS 安装包，同样按用户安装。'
+            printf '\n**macOS**（Intel + Apple Silicon 通用）\n'
+            printf '%s\n' '- `memo-macos-universal.dmg`'
+            printf '\n安装包未签名、未公证。Windows SmartScreen 可能需要“更多信息 → 仍要运行”；macOS 首次打开请右键 → 打开。\n\n'
+            printf '校验下载：`SHA256SUMS.txt`。\n'
+          } > "$out"
+          cat "$out" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: memo ${{ github.ref_name }}
-          generate_release_notes: true
           fail_on_unmatched_files: true
-          body: |
-            memo ${{ github.ref_name }} — 本地优先的桌面速记，可选归档到 Notion。
-
-            **Windows**
-            - `memo-windows-amd64.msi`：推荐，按用户安装，无需管理员权限。
-            - `memo-windows-amd64-installer.exe`：NSIS 安装包，同样按用户安装。
-
-            **macOS**（Intel + Apple Silicon 通用）
-            - `memo-macos-universal.dmg`
-
-            安装包未签名、未公证。Windows SmartScreen 可能需要“更多信息 → 仍要运行”；macOS 首次打开请右键 → 打开。
-
-            校验下载：`SHA256SUMS.txt`。
+          body_path: ${{ runner.temp }}/release-notes.md
           files: artifacts/*

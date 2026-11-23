@@ -113,4 +113,18 @@ describe("App", () => {
     await screen.findByRole("button", { name: "点击恢复同步" });
     expect(screen.queryByText(/等待同步/)).not.toBeInTheDocument();
   });
+
+  it("collapses and restores the sidebar", async () => {
+    window.localStorage.setItem("memo.sidebar.open", "1");
+    render(<App backend={demoBackend} />);
+
+    expect(document.querySelector(".sidebar")).not.toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "收起侧边栏" }));
+    expect(document.querySelector(".sidebar")).toBeNull();
+    expect(await screen.findByRole("button", { name: "展开侧边栏" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "展开侧边栏" }));
+    expect(document.querySelector(".sidebar")).not.toBeNull();
+    expect(await screen.findByRole("button", { name: "收起侧边栏" })).toBeInTheDocument();
+  });
 });

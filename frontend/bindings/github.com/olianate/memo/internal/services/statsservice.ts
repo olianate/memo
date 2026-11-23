@@ -18,5 +18,5 @@ import * as stats$0 from "../stats/models.js";
  * Dashboard computes the selected month's dashboard from local data only.
  */
 export function Dashboard(month: string): $CancellablePromise<stats$0.Dashboard | null> {
-    return $Call.ByID(849514384, month);
+    return $Call.ByID(2743175725, month);
 }

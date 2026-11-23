@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -210,7 +211,9 @@ func (s *SettingsService) ExportBackup() (BackupResult, error) {
 	return BackupResult{Path: dir, Bytes: size, At: time.Now().Local().Format(time.RFC3339)}, nil
 }
 
-// ExportLogs writes the bounded sync log to a text file.
+// ExportLogs writes the bounded activity log plus an error-only log to a
+// timestamped folder. A short header makes the file useful when a user shares
+// it for troubleshooting.
 func (s *SettingsService) ExportLogs() (string, error) {
 	dir, err := s.backupDir("logs")
 	if err != nil {
@@ -220,12 +223,25 @@ func (s *SettingsService) ExportLogs() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var sb strings.Builder
+	header := fmt.Sprintf(
+		"memo %s\n导出时间: %s\n平台: %s/%s\n数据目录: %s\n\n",
+		Version, time.Now().Local().Format(time.RFC3339), runtime.GOOS, runtime.GOARCH, s.DataDir(),
+	)
+	var all, errorsOnly strings.Builder
+	all.WriteString(header)
+	errorsOnly.WriteString(header)
 	for _, l := range logs {
-		fmt.Fprintf(&sb, "%s\t%s\t%s\t%s\n", l.At.Local().Format(time.RFC3339), l.Level, l.Event, l.Message)
+		line := fmt.Sprintf("%s\t%s\t%s\t%s\n", l.At.Local().Format(time.RFC3339), l.Level, l.Event, l.Message)
+		all.WriteString(line)
+		if l.Level == "error" {
+			errorsOnly.WriteString(line)
+		}
 	}
 	path := filepath.Join(dir, "sync.log")
-	if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(all.String()), 0o644); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "errors.log"), []byte(errorsOnly.String()), 0o644); err != nil {
 		return "", err
 	}
 	return path, nil

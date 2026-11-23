@@ -18,5 +18,5 @@ import * as $models from "./models.js";
  * Query searches memo text and tags, optionally filtered by tag and date.
  */
 export function Query(query: string, tag: string, $from: string, to: string): $CancellablePromise<$models.SearchResultDTO[] | null> {
-    return $Call.ByID(332694397, query, tag, $from, to);
+    return $Call.ByID(1300818846, query, tag, $from, to);
 }

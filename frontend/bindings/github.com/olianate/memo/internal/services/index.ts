@@ -27,6 +27,7 @@ export type {
     ConnectRequest,
     ConnectResult,
     CountsDTO,
+    ErrorReport,
     FilterDTO,
     MemoDTO,
     ParentPageDTO,

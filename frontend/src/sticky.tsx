@@ -6,6 +6,7 @@ import { wailsBackend } from "./wailsBackend";
 import { demoBackend } from "./demoBackend";
 import { MarkdownEditor } from "./components/MarkdownEditor";
 import { fileToBase64 } from "./lib/files";
+import { installGlobalErrorHandlers, reportError, setErrorSink } from "./lib/errorLog";
 import { CloseIcon, PaperclipIcon, SendIcon } from "./components/Icons";
 
 function newParagraph(): Block {
@@ -24,6 +25,15 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
   const [error, setError] = useState("");
   const [syncLabel, setSyncLabel] = useState("本地优先");
   const uploading = useRef(false);
+
+  useEffect(() => {
+    setErrorSink((report) => b.reportError(report));
+    const removeHandlers = installGlobalErrorHandlers();
+    return () => {
+      removeHandlers();
+      setErrorSink(null);
+    };
+  }, [b]);
 
   useEffect(() => {
     void b.tags().then((rows) => setKnownTags(rows.map((t) => ({ id: t.id, name: t.name, count: t.count }))));
@@ -67,6 +77,7 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2000);
     } catch (e) {
+      reportError(e, { action: "save", draft_id: draftId }, "sticky");
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
@@ -108,6 +119,7 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
       setTags((memo.tags ?? []).map((t) => t.name));
       setAttachments(memo.attachments ?? []);
     } catch (e) {
+      reportError(e, { action: "add_attachment", draft_id: draftId }, "sticky");
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       uploading.current = false;
@@ -122,6 +134,7 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
       setBlocks(memo.blocks ?? [newParagraph()]);
       setAttachments(memo.attachments ?? []);
     } catch (e) {
+      reportError(e, { action: "remove_attachment", draft_id: draftId, attachment_id: id }, "sticky");
       setError(e instanceof Error ? e.message : String(e));
     }
   };

@@ -44,14 +44,13 @@ export function Sidebar({
   onTrash: () => void;
 }) {
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" id="app-sidebar">
       <div className="brand">
         <div className="brand-mark" aria-hidden="true">
           m
         </div>
         <div>
           <div className="brand-name">memo</div>
-          <div className="brand-sub">local-first</div>
         </div>
       </div>
 

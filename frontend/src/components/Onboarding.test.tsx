@@ -75,6 +75,32 @@ describe("Onboarding", () => {
     );
   });
 
+  it("renders a ready shared database when the backend omits empty arrays", async () => {
+    const parentPages = vi.fn(async () => ({
+      databases: [{ id: "ds1", database_id: "db1", title: "shared memo db", url: "" }],
+      pages: [],
+    }));
+    const preview = vi.fn(async () => ({
+      id: "ds1",
+      title: "shared memo db",
+      title_property: "名称",
+      missing_properties: null as any,
+      conflicts: null as any,
+      has_existing_rows: false,
+    }));
+    render(
+      <Onboarding
+        backend={{ ...demoBackend, validateToken: async () => workspace, parentPages, previewArchiveDatabase: preview }}
+        onDone={() => {}}
+        onSkip={() => {}}
+      />,
+    );
+
+    await openParentStep();
+    expect(await screen.findByText("该数据库已包含 memo 所需属性，可直接使用。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "使用此数据库并连接" })).toBeEnabled();
+  });
+
   it("asks for a database name when a page is selected", async () => {
     const parentPages = vi.fn(async () => ({
       databases: [{ id: "ds1", database_id: "db1", title: "shared memo db", url: "" }],

@@ -12,20 +12,24 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as store$0 from "../store/models.js";
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
 /**
  * CompleteOnboarding marks first-run setup as done (skip or Notion connect).
  */
 export function CompleteOnboarding(): $CancellablePromise<void> {
-    return $Call.ByID(2807270340);
+    return $Call.ByID(2964711805);
 }
 
 /**
  * DataDir returns where the database and attachments live.
  */
 export function DataDir(): $CancellablePromise<string> {
-    return $Call.ByID(1128833473);
+    return $Call.ByID(4076035334);
 }
 
 /**
@@ -34,7 +38,7 @@ export function DataDir(): $CancellablePromise<string> {
  * Notion. Notion itself is never modified.
  */
 export function DeleteLocalData(): $CancellablePromise<void> {
-    return $Call.ByID(1959050656);
+    return $Call.ByID(3931870543);
 }
 
 /**
@@ -42,61 +46,79 @@ export function DeleteLocalData(): $CancellablePromise<void> {
  * timestamped folder under the data directory.
  */
 export function ExportBackup(): $CancellablePromise<$models.BackupResult> {
-    return $Call.ByID(2160567654);
+    return $Call.ByID(308848919);
 }
 
 /**
- * ExportLogs writes the bounded sync log to a text file.
+ * ExportLogs writes the bounded activity log plus an error-only log to a
+ * timestamped folder. A short header makes the file useful when a user shares
+ * it for troubleshooting.
  */
 export function ExportLogs(): $CancellablePromise<string> {
-    return $Call.ByID(355742187);
+    return $Call.ByID(2543980270);
 }
 
 /**
  * Get returns all settings.
  */
 export function Get(): $CancellablePromise<$models.SettingsDTO> {
-    return $Call.ByID(4043119302);
+    return $Call.ByID(1934526233);
 }
 
 /**
  * OpenDataDir reveals the data directory in the OS file manager.
  */
 export function OpenDataDir(): $CancellablePromise<void> {
-    return $Call.ByID(551828969);
+    return $Call.ByID(617986218);
 }
 
 /**
  * RebuildIndex re-creates the FTS rows from local metadata and bodies.
  */
 export function RebuildIndex(): $CancellablePromise<void> {
-    return $Call.ByID(1880166691);
+    return $Call.ByID(1296045074);
+}
+
+/**
+ * RecentErrors returns the most recent error-level entries for the settings UI.
+ */
+export function RecentErrors(): $CancellablePromise<store$0.SyncLog[] | null> {
+    return $Call.ByID(860546603);
+}
+
+/**
+ * ReportError stores a frontend diagnostic event. Source becomes part of the
+ * event name (`ui:<source>`), while stack and context stay in the message so a
+ * single exported log contains enough information to reproduce the issue.
+ */
+export function ReportError(report: $models.ErrorReport): $CancellablePromise<void> {
+    return $Call.ByID(2613919237, report);
 }
 
 /**
  * SetHotkey applies and persists a new capture accelerator.
  */
 export function SetHotkey(accelerator: string): $CancellablePromise<void> {
-    return $Call.ByID(2212292452, accelerator);
+    return $Call.ByID(3799346355, accelerator);
 }
 
 /**
  * SetRetention changes the eviction window. Accepted: 7, 30, 90, or -1 never.
  */
 export function SetRetention(days: number, immediate: boolean): $CancellablePromise<void> {
-    return $Call.ByID(2654975664, days, immediate);
+    return $Call.ByID(1765867217, days, immediate);
 }
 
 /**
  * SetStartAtLogin applies and persists login startup.
  */
 export function SetStartAtLogin(enabled: boolean): $CancellablePromise<void> {
-    return $Call.ByID(3016453900, enabled);
+    return $Call.ByID(3449873343, enabled);
 }
 
 /**
  * SetTheme persists light, dark, or system.
  */
 export function SetTheme(theme: string): $CancellablePromise<void> {
-    return $Call.ByID(602680843, theme);
+    return $Call.ByID(2476207922, theme);
 }

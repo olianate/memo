@@ -9,6 +9,7 @@ import type {
   ConnectResult,
   Counts,
   Dashboard,
+  ErrorReport,
   Filter,
   Memo,
   ParentPageList,
@@ -61,6 +62,8 @@ export interface Backend {
   deleteLocalData(): Promise<void>;
   exportBackup(): Promise<BackupResult>;
   exportLogs(): Promise<string>;
+  reportError(report: ErrorReport): Promise<void>;
+  errorLogs(): Promise<SyncLog[]>;
   openDataDir(): Promise<void>;
   completeOnboarding(): Promise<void>;
 

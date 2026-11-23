@@ -23,49 +23,49 @@ import * as $models from "./models.js";
  * attachment block to the memo so the change is durable immediately.
  */
 export function AddAttachmentBase64(memoID: string, name: string, mime: string, data: string): $CancellablePromise<$models.AttachmentDTO> {
-    return $Call.ByID(3457434226, memoID, name, mime, data);
+    return $Call.ByID(3848189305, memoID, name, mime, data);
 }
 
 /**
  * AttachmentData returns a data URL for the full image.
  */
 export function AttachmentData(id: string): $CancellablePromise<string> {
-    return $Call.ByID(742065380, id);
+    return $Call.ByID(3482320341, id);
 }
 
 /**
  * AttachmentThumb returns a data URL for an image thumbnail.
  */
 export function AttachmentThumb(id: string): $CancellablePromise<string> {
-    return $Call.ByID(3839637404, id);
+    return $Call.ByID(1697459283, id);
 }
 
 /**
  * Counts returns the sidebar totals.
  */
 export function Counts(): $CancellablePromise<$models.CountsDTO> {
-    return $Call.ByID(150135881);
+    return $Call.ByID(3384709692);
 }
 
 /**
  * Create stores a new memo and returns it.
  */
 export function Create(blocks: domain$0.Block[] | null, tags: string[] | null): $CancellablePromise<$models.MemoDTO> {
-    return $Call.ByID(3887182857, blocks, tags);
+    return $Call.ByID(3023508364, blocks, tags);
 }
 
 /**
  * Delete soft-deletes a memo so the tombstone can sync.
  */
 export function Delete(id: string): $CancellablePromise<void> {
-    return $Call.ByID(3841187134, id);
+    return $Call.ByID(66174195, id);
 }
 
 /**
  * EmptyTrash permanently removes every memo in the trash.
  */
 export function EmptyTrash(): $CancellablePromise<number> {
-    return $Call.ByID(1072544280);
+    return $Call.ByID(823648905);
 }
 
 /**
@@ -73,14 +73,14 @@ export function EmptyTrash(): $CancellablePromise<number> {
  * hydration still returns the metadata so the UI can show a placeholder.
  */
 export function Get(id: string): $CancellablePromise<$models.MemoDTO> {
-    return $Call.ByID(1007042299, id);
+    return $Call.ByID(2866483028, id);
 }
 
 /**
  * Hydrate fetches an evicted memo's body and attachments from Notion.
  */
 export function Hydrate(id: string): $CancellablePromise<$models.MemoDTO> {
-    return $Call.ByID(4159885276, id);
+    return $Call.ByID(3302622927, id);
 }
 
 /**
@@ -88,7 +88,7 @@ export function Hydrate(id: string): $CancellablePromise<$models.MemoDTO> {
  * empty block list and local_state=evicted.
  */
 export function List(filter: $models.FilterDTO): $CancellablePromise<$models.MemoDTO[] | null> {
-    return $Call.ByID(3054384069, filter);
+    return $Call.ByID(2933935024, filter);
 }
 
 /**
@@ -96,14 +96,14 @@ export function List(filter: $models.FilterDTO): $CancellablePromise<$models.Mem
  * webview boundary.
  */
 export function OpenAttachment(id: string): $CancellablePromise<void> {
-    return $Call.ByID(1792859432, id);
+    return $Call.ByID(2090802733, id);
 }
 
 /**
  * ParseMarkdown is the raw-editor → AST path. The canonical body stays blocks.
  */
 export function ParseMarkdown(source: string): $CancellablePromise<domain$0.Block[] | null> {
-    return $Call.ByID(3136616481, source);
+    return $Call.ByID(3521379882, source);
 }
 
 /**
@@ -111,35 +111,35 @@ export function ParseMarkdown(source: string): $CancellablePromise<domain$0.Bloc
  * queued for a tombstone so a later pull cannot resurrect it.
  */
 export function Purge(id: string): $CancellablePromise<void> {
-    return $Call.ByID(1227565336, id);
+    return $Call.ByID(2906333127, id);
 }
 
 /**
  * RemoveAttachment deletes an attachment and its block from the memo body.
  */
 export function RemoveAttachment(id: string): $CancellablePromise<void> {
-    return $Call.ByID(1499322540, id);
+    return $Call.ByID(1929623245, id);
 }
 
 /**
  * Restore undoes a soft delete.
  */
 export function Restore(id: string): $CancellablePromise<$models.MemoDTO> {
-    return $Call.ByID(1093239341, id);
+    return $Call.ByID(1080062698, id);
 }
 
 /**
  * SerializeMarkdown is the AST → raw-editor path.
  */
 export function SerializeMarkdown(blocks: domain$0.Block[] | null): $CancellablePromise<string> {
-    return $Call.ByID(3771385100, blocks);
+    return $Call.ByID(2767675707, blocks);
 }
 
 /**
  * SetKeepLocal pins a memo against retention eviction.
  */
 export function SetKeepLocal(id: string, keep: boolean): $CancellablePromise<void> {
-    return $Call.ByID(2427367285, id, keep);
+    return $Call.ByID(2319042460, id, keep);
 }
 
 /**
@@ -147,5 +147,5 @@ export function SetKeepLocal(id: string, keep: boolean): $CancellablePromise<voi
  * possible the edit is refused rather than overwriting the archive.
  */
 export function Update(id: string, blocks: domain$0.Block[] | null, tags: string[] | null, keepLocal: boolean): $CancellablePromise<$models.MemoDTO> {
-    return $Call.ByID(1562156440, id, blocks, tags, keepLocal);
+    return $Call.ByID(1044183081, id, blocks, tags, keepLocal);
 }

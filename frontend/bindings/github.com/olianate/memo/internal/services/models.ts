@@ -106,6 +106,18 @@ export interface CountsDTO {
 }
 
 /**
+ * ErrorReport is a diagnostic event sent by the frontend. Every field is
+ * bounded and redacted before it reaches the local log, so pasting a log file
+ * into a bug report does not leak a Notion token.
+ */
+export interface ErrorReport {
+    "source": string;
+    "message": string;
+    "stack"?: string;
+    "context"?: string;
+}
+
+/**
  * FilterDTO is the timeline filter.
  */
 export interface FilterDTO {

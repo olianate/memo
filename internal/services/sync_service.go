@@ -157,7 +157,8 @@ func (s *SyncService) SyncNow() error {
 func (s *SyncService) SetActive(active bool) { s.engine.SetActive(active) }
 
 // ValidateToken checks a personal access token with users.me.
-func (s *SyncService) ValidateToken(token string) (WorkspaceDTO, error) {
+func (s *SyncService) ValidateToken(token string) (info WorkspaceDTO, err error) {
+	defer s.logFailure("notion.validate_token", &err)
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return WorkspaceDTO{}, errors.New("请输入 Notion 集成令牌")
@@ -171,7 +172,8 @@ func (s *SyncService) ValidateToken(token string) (WorkspaceDTO, error) {
 
 // ParentPages lists shared databases and pages (the integration must have
 // access). Databases are the preferred target; pages are for creating one.
-func (s *SyncService) ParentPages(token, query string) (ParentPageList, error) {
+func (s *SyncService) ParentPages(token, query string) (out ParentPageList, err error) {
+	defer s.logFailure("notion.parent_pages", &err)
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return ParentPageList{}, errors.New("请输入 Notion 集成令牌")
@@ -180,7 +182,7 @@ func (s *SyncService) ParentPages(token, query string) (ParentPageList, error) {
 	if err != nil {
 		return ParentPageList{}, friendlyNotionError(err)
 	}
-	out := ParentPageList{
+	out = ParentPageList{
 		Databases: make([]ArchiveDatabaseDTO, 0, len(found.DataSources)),
 		Pages:     make([]ParentPageDTO, 0, len(found.Pages)),
 	}
@@ -209,7 +211,8 @@ func (s *SyncService) ParentPages(token, query string) (ParentPageList, error) {
 // ResolveArchiveTarget validates a pasted database/page link or ID. Search can
 // lag behind sharing changes, so this is the escape hatch that works
 // immediately. Databases are preferred when the link matches both kinds.
-func (s *SyncService) ResolveArchiveTarget(token, target string) (ArchiveTargetDTO, error) {
+func (s *SyncService) ResolveArchiveTarget(token, target string) (out ArchiveTargetDTO, err error) {
+	defer s.logFailure("notion.resolve_target", &err)
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return ArchiveTargetDTO{}, errors.New("请输入 Notion 集成令牌")
@@ -248,7 +251,8 @@ func archiveDatabaseTarget(ds *notion.DataSource) ArchiveTargetDTO {
 
 // PreviewArchiveDatabase checks what connecting an existing database would
 // change. It never writes anything.
-func (s *SyncService) PreviewArchiveDatabase(token, target string) (ArchiveDatabasePreview, error) {
+func (s *SyncService) PreviewArchiveDatabase(token, target string) (preview ArchiveDatabasePreview, err error) {
+	defer s.logFailure("notion.preview_database", &err)
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return ArchiveDatabasePreview{}, errors.New("请输入 Notion 集成令牌")
@@ -272,11 +276,12 @@ func (s *SyncService) PreviewArchiveDatabase(token, target string) (ArchiveDatab
 	if title == "" {
 		title = "未命名数据库"
 	}
-	preview := ArchiveDatabasePreview{
-		ID:            ds.ID,
-		Title:         title,
-		TitleProperty: titleProp,
-		Conflicts:     make([]SchemaConflictDTO, 0, len(plan.Conflicts)),
+	preview = ArchiveDatabasePreview{
+		ID:                ds.ID,
+		Title:             title,
+		TitleProperty:     titleProp,
+		MissingProperties: make([]SchemaPropertyDTO, 0, len(plan.Missing)),
+		Conflicts:         make([]SchemaConflictDTO, 0, len(plan.Conflicts)),
 	}
 	names := make([]string, 0, len(plan.Missing))
 	for name := range plan.Missing {
@@ -316,7 +321,8 @@ func parentPageDTO(p notion.Page) (ParentPageDTO, error) {
 // Connect validates the token, connects an existing shared database or creates
 // the app-owned database under a page, stores the token in the OS keychain, and
 // turns sync on.
-func (s *SyncService) Connect(req ConnectRequest) (ConnectResult, error) {
+func (s *SyncService) Connect(req ConnectRequest) (result ConnectResult, err error) {
+	defer s.logFailure("notion.connect", &err)
 	token := strings.TrimSpace(req.Token)
 	targetID := notion.ParsePageID(req.TargetID)
 	if token == "" || strings.TrimSpace(req.TargetID) == "" {
@@ -432,6 +438,11 @@ func (s *SyncService) Connect(req ConnectRequest) (ConnectResult, error) {
 	if databaseTitle == "" {
 		databaseTitle = "未命名数据库"
 	}
+	if createdDatabase {
+		s.log("info", "notion.connect", fmt.Sprintf("已在页面下创建并连接数据库「%s」", databaseTitle))
+	} else {
+		s.log("info", "notion.connect", fmt.Sprintf("已连接共享数据库「%s」", databaseTitle))
+	}
 	return ConnectResult{
 		Workspace:       WorkspaceDTO{Name: me.WorkspaceName, ID: me.ID, FileLimit: limit, BotType: me.BotType},
 		DataSourceID:    ds.ID,
@@ -462,6 +473,11 @@ func (s *SyncService) Disconnect() error {
 	note(s.cfg.SetBool(ctx, config.KeySyncEnabled, false))
 	note(s.cfg.SetBool(ctx, config.KeySyncPaused, false))
 	s.emitStatus()
+	if firstErr != nil {
+		s.log("error", "notion.disconnect", firstErr.Error())
+	} else {
+		s.log("info", "notion.disconnect", "已断开 Notion 归档")
+	}
 	return firstErr
 }
 

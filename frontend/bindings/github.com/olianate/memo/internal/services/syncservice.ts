@@ -27,28 +27,28 @@ import * as $models from "./models.js";
  * turns sync on.
  */
 export function Connect(req: $models.ConnectRequest): $CancellablePromise<$models.ConnectResult> {
-    return $Call.ByID(3825503018, req);
+    return $Call.ByID(3126135041, req);
 }
 
 /**
  * Disconnect clears the token and connection state but keeps local memos.
  */
 export function Disconnect(): $CancellablePromise<void> {
-    return $Call.ByID(3669484046);
+    return $Call.ByID(258755635);
 }
 
 /**
  * Hydrate fetches one evicted memo from Notion.
  */
 export function Hydrate(memoID: string): $CancellablePromise<void> {
-    return $Call.ByID(2981915643, memoID);
+    return $Call.ByID(2572974160, memoID);
 }
 
 /**
  * Logs returns the bounded sync log.
  */
 export function Logs(): $CancellablePromise<store$0.SyncLog[] | null> {
-    return $Call.ByID(937913999);
+    return $Call.ByID(3259025870);
 }
 
 /**
@@ -56,7 +56,7 @@ export function Logs(): $CancellablePromise<store$0.SyncLog[] | null> {
  * access). Databases are the preferred target; pages are for creating one.
  */
 export function ParentPages(token: string, query: string): $CancellablePromise<$models.ParentPageList> {
-    return $Call.ByID(3545760076, token, query);
+    return $Call.ByID(2675595535, token, query);
 }
 
 /**
@@ -64,7 +64,7 @@ export function ParentPages(token: string, query: string): $CancellablePromise<$
  * change. It never writes anything.
  */
 export function PreviewArchiveDatabase(token: string, target: string): $CancellablePromise<$models.ArchiveDatabasePreview> {
-    return $Call.ByID(59239171, token, target);
+    return $Call.ByID(4176234778, token, target);
 }
 
 /**
@@ -73,54 +73,54 @@ export function PreviewArchiveDatabase(token: string, target: string): $Cancella
  * immediately. Databases are preferred when the link matches both kinds.
  */
 export function ResolveArchiveTarget(token: string, target: string): $CancellablePromise<$models.ArchiveTargetDTO> {
-    return $Call.ByID(2503829247, token, target);
+    return $Call.ByID(1595467398, token, target);
 }
 
 /**
  * RestoreAll hydrates every evicted memo with progress events.
  */
 export function RestoreAll(): $CancellablePromise<sync$0.RestoreProgress> {
-    return $Call.ByID(3145463949);
+    return $Call.ByID(2201155072);
 }
 
 /**
  * SetActive tells the poller whether a window is in the foreground.
  */
 export function SetActive(active: boolean): $CancellablePromise<void> {
-    return $Call.ByID(910461902, active);
+    return $Call.ByID(1826541813, active);
 }
 
 /**
  * SetEnabled turns global sync on or off. Enabling queues every local-only memo.
  */
 export function SetEnabled(enabled: boolean): $CancellablePromise<void> {
-    return $Call.ByID(2357104589, enabled);
+    return $Call.ByID(2622650144, enabled);
 }
 
 /**
  * SetPaused pauses or resumes the workers without disconnecting.
  */
 export function SetPaused(paused: boolean): $CancellablePromise<void> {
-    return $Call.ByID(609891510, paused);
+    return $Call.ByID(3683468437, paused);
 }
 
 /**
  * Status returns the sync state machine plus recent log lines.
  */
 export function Status(): $CancellablePromise<sync$0.Status> {
-    return $Call.ByID(1929792350);
+    return $Call.ByID(2060333047);
 }
 
 /**
  * SyncNow forces an immediate push and pull.
  */
 export function SyncNow(): $CancellablePromise<void> {
-    return $Call.ByID(3688221201);
+    return $Call.ByID(249715858);
 }
 
 /**
  * ValidateToken checks a personal access token with users.me.
  */
 export function ValidateToken(token: string): $CancellablePromise<$models.WorkspaceDTO> {
-    return $Call.ByID(3657029511, token);
+    return $Call.ByID(185763376, token);
 }

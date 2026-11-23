@@ -190,6 +190,13 @@ export interface SyncLog {
   message: string;
 }
 
+export interface ErrorReport {
+  source: string;
+  message: string;
+  stack?: string;
+  context?: string;
+}
+
 export interface SyncStatus {
   state: "idle" | "syncing" | "offline" | "paused" | "error";
   enabled: boolean;

@@ -271,12 +271,25 @@ func (s *Store) Logs(ctx context.Context, limit int) ([]SyncLog, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, at, level, event, message FROM sync_log ORDER BY id DESC LIMIT ?`, limit)
+	return s.queryLogs(ctx, `SELECT id, at, level, event, message FROM sync_log ORDER BY id DESC LIMIT ?`, limit)
+}
+
+// Errors returns recent error-level events, newest first. Frontend reports use
+// the same table, so one export contains the full reproduction trail.
+func (s *Store) Errors(ctx context.Context, limit int) ([]SyncLog, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	return s.queryLogs(ctx, `SELECT id, at, level, event, message FROM sync_log WHERE level = 'error' ORDER BY id DESC LIMIT ?`, limit)
+}
+
+func (s *Store) queryLogs(ctx context.Context, query string, limit int) ([]SyncLog, error) {
+	rows, err := s.db.QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []SyncLog
+	out := make([]SyncLog, 0, limit)
 	for rows.Next() {
 		var e SyncLog
 		var at int64

@@ -7,6 +7,7 @@ import type {
   Workspace,
 } from "../types";
 import type { Backend } from "../backend";
+import { reportError } from "../lib/errorLog";
 import { CheckIcon, SearchIcon } from "./Icons";
 
 type Step = "welcome" | "token" | "parent" | "done";
@@ -49,6 +50,10 @@ export function Onboarding({
   const selectedDatabase = selection?.kind === "database" ? selection.value : null;
   const selectedPage = selection?.kind === "page" ? selection.value : null;
   const selectedDatabaseID = selectedDatabase?.id ?? "";
+  // Go marshals a nil slice as JSON null. Normalize here as a second line of
+  // defence so a preview payload can never crash rendering.
+  const missingProperties = preview?.missing_properties ?? [];
+  const conflicts = preview?.conflicts ?? [];
 
   useEffect(() => {
     void backend
@@ -57,7 +62,7 @@ export function Onboarding({
         setHotkey(settings.hotkey);
         setStartAtLogin(settings.start_at_login);
       })
-      .catch(() => {});
+      .catch((e) => reportError(e, { action: "load_settings" }, "onboarding"));
   }, [backend]);
 
   useEffect(() => {
@@ -88,7 +93,10 @@ export function Onboarding({
         if (!cancelled) setPreview(next);
       })
       .catch((e) => {
-        if (!cancelled) setPreviewError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) {
+          reportError(e, { action: "preview_database", target: selectedDatabaseID }, "onboarding");
+          setPreviewError(e instanceof Error ? e.message : String(e));
+        }
       })
       .finally(() => {
         if (!cancelled) setPreviewLoading(false);
@@ -118,6 +126,7 @@ export function Onboarding({
         return first ? { kind: "database", value: first } : null;
       });
     } catch (e) {
+      reportError(e, { action: "load_targets", query: search }, "onboarding");
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -164,6 +173,7 @@ export function Onboarding({
       }
       setManualTarget("");
     } catch (e) {
+      reportError(e, { action: "resolve_target", target: manualTarget.trim() }, "onboarding");
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setResolving(false);
@@ -178,6 +188,7 @@ export function Onboarding({
       setWorkspace(info);
       setStep("parent");
     } catch (e) {
+      reportError(e, { action: "validate_token" }, "onboarding");
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -195,13 +206,16 @@ export function Onboarding({
         target_id: selection.value.id,
         database_name: selection.kind === "page" ? databaseName.trim() || "memo" : "",
         confirm_schema_changes:
-          selection.kind === "database" &&
-          Boolean(preview?.missing_properties.length) &&
-          schemaConfirmed,
+          selection.kind === "database" && missingProperties.length > 0 && schemaConfirmed,
       });
       setResult(connected);
       setStep("done");
     } catch (e) {
+      reportError(
+        e,
+        { action: "connect", kind: selection.kind, target: selection.value.id },
+        "onboarding",
+      );
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -211,6 +225,8 @@ export function Onboarding({
   const skip = async () => {
     try {
       await backend.completeOnboarding();
+    } catch (e) {
+      reportError(e, { action: "complete_onboarding" }, "onboarding");
     } finally {
       onSkip();
     }
@@ -225,10 +241,8 @@ export function Onboarding({
       ? [selectedPage, ...pages]
       : pages;
 
-  const needsSchemaConfirmation = Boolean(
-    selectedDatabase && preview && preview.missing_properties.length > 0,
-  );
-  const hasSchemaConflicts = Boolean(selectedDatabase && preview && preview.conflicts.length > 0);
+  const needsSchemaConfirmation = Boolean(selectedDatabase && preview && missingProperties.length > 0);
+  const hasSchemaConflicts = Boolean(selectedDatabase && preview && conflicts.length > 0);
   const connectDisabled =
     busy ||
     !selection ||
@@ -247,7 +261,7 @@ export function Onboarding({
           <div className="brand-mark">m</div>
           <div>
             <strong>memo</strong>
-            <span>local-first · 可选 Notion 归档</span>
+            <span>个人笔记 · 可选 Notion 归档</span>
           </div>
         </div>
 
@@ -413,11 +427,11 @@ export function Onboarding({
                 {previewError && <div className="inline-error">{previewError}</div>}
                 {preview && (
                   <>
-                    {preview.conflicts.length > 0 ? (
+                    {conflicts.length > 0 ? (
                       <div className="schema-warning is-error">
                         <strong>无法使用这个数据库</strong>
                         <ul>
-                          {preview.conflicts.map((conflict) => (
+                          {conflicts.map((conflict) => (
                             <li key={conflict.name}>
                               属性「{conflict.name}」已有类型 {conflict.existing_type}，memo 需要 {conflict.required_type}
                             </li>
@@ -425,11 +439,11 @@ export function Onboarding({
                         </ul>
                         <p>请改用一个共享数据库，或先在 Notion 中调整冲突属性。</p>
                       </div>
-                    ) : preview.missing_properties.length > 0 ? (
+                    ) : missingProperties.length > 0 ? (
                       <div className="schema-warning">
-                        <strong>连接时会新增 {preview.missing_properties.length} 个属性</strong>
+                        <strong>连接时会新增 {missingProperties.length} 个属性</strong>
                         <ul>
-                          {preview.missing_properties.map((property) => (
+                          {missingProperties.map((property) => (
                             <li key={property.name}>
                               {property.name} <em>{property.type}</em>
                             </li>
@@ -531,10 +545,13 @@ export function Onboarding({
               之后每次编辑都会先写本地，再由同步队列推送。旧正文和附件会按保留期清理，元数据与搜索索引保留。
             </p>
             <div className="done-facts">
-              <div><span>数据库</span><strong>{result?.database_title}</strong></div>
-              <div><span>数据源</span><strong>{result?.data_source_id.slice(0, 12)}…</strong></div>
-              <div><span>标题属性</span><strong>{result?.title_property}</strong></div>
-              <div><span>文件上限</span><strong>{Math.round((result?.workspace.file_limit ?? 0) / 1024 / 1024)} MB</strong></div>
+              <div><span>数据库</span><strong>{result?.database_title ?? "—"}</strong></div>
+              <div>
+                <span>数据源</span>
+                <strong>{result?.data_source_id ? `${result.data_source_id.slice(0, 12)}…` : "—"}</strong>
+              </div>
+              <div><span>标题属性</span><strong>{result?.title_property ?? "—"}</strong></div>
+              <div><span>文件上限</span><strong>{Math.round((result?.workspace?.file_limit ?? 0) / 1024 / 1024)} MB</strong></div>
             </div>
             <div className="onboarding-preferences">
               <label className="field">
@@ -561,7 +578,10 @@ export function Onboarding({
                     .then(() => backend.setStartAtLogin(startAtLogin))
                     .then(() => backend.completeOnboarding())
                     .then(onDone)
-                    .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+                    .catch((e) => {
+                      reportError(e, { action: "finish_onboarding" }, "onboarding");
+                      setError(e instanceof Error ? e.message : String(e));
+                    })
                     .finally(() => setBusy(false));
                 }}
               >

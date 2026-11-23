@@ -19,33 +19,33 @@ import * as $models from "./models.js";
  * Delete removes a tag from every memo.
  */
 export function Delete(id: string): $CancellablePromise<void> {
-    return $Call.ByID(4224208040, id);
+    return $Call.ByID(1856648835, id);
 }
 
 /**
  * List returns tags with active-memo counts.
  */
 export function List(): $CancellablePromise<$models.TagDTO[] | null> {
-    return $Call.ByID(1606767267);
+    return $Call.ByID(2148564704);
 }
 
 /**
  * Merge moves all memos from source into target and deletes source.
  */
 export function Merge(sourceID: string, targetID: string): $CancellablePromise<void> {
-    return $Call.ByID(1070401865, sourceID, targetID);
+    return $Call.ByID(3106870100, sourceID, targetID);
 }
 
 /**
  * Rename changes a tag's display name and normalized key.
  */
 export function Rename(id: string, name: string): $CancellablePromise<$models.TagDTO> {
-    return $Call.ByID(1105295345, id, name);
+    return $Call.ByID(3329904474, id, name);
 }
 
 /**
  * Suggest returns tag autocomplete options for a `#` prefix.
  */
 export function Suggest(query: string): $CancellablePromise<$models.TagDTO[] | null> {
-    return $Call.ByID(338122487, query);
+    return $Call.ByID(13501826, query);
 }

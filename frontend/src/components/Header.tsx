@@ -1,13 +1,15 @@
 import type { ReactNode } from "react";
 import type { SyncStatus } from "../types";
 import { relativeTime } from "../lib/format";
-import { CloudIcon, MoonIcon, SearchIcon, SunIcon, RefreshIcon } from "./Icons";
+import { CloudIcon, MoonIcon, PanelLeftIcon, SearchIcon, SunIcon, RefreshIcon } from "./Icons";
 
 export function Topbar({
   query,
   onQuery,
   sync,
   theme,
+  sidebarOpen,
+  onToggleSidebar,
   onToggleTheme,
   onToggleSync,
 }: {
@@ -15,6 +17,8 @@ export function Topbar({
   onQuery: (value: string) => void;
   sync: SyncStatus | null;
   theme: "light" | "dark" | "system";
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
   onToggleTheme: () => void;
   onToggleSync: () => void;
 }) {
@@ -46,9 +50,19 @@ export function Topbar({
   return (
     <header className="topbar">
       <div className="topbar-brand">
+        <button
+          type="button"
+          className="icon-button sidebar-toggle"
+          onClick={onToggleSidebar}
+          aria-label={sidebarOpen ? "收起侧边栏" : "展开侧边栏"}
+          title={sidebarOpen ? "收起侧边栏" : "展开侧边栏"}
+          aria-expanded={sidebarOpen}
+          aria-controls="app-sidebar"
+        >
+          <PanelLeftIcon size={17} />
+        </button>
         <span className="topbar-dot" aria-hidden="true" />
         <span>memo</span>
-        <span className="mini-badge">local-first</span>
       </div>
 
       <label className="search-box">

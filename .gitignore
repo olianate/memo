@@ -6,6 +6,7 @@ bin/
 **/coverage/
 **/.vite/
 **/*.syso
+third_party/wails/internal/commands/build_assets/android/.gradle/
 
 # Node dependencies
 frontend/node_modules/

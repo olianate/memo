@@ -7,6 +7,7 @@ import type {
   ConnectRequest,
   ConnectResult,
   Dashboard,
+  ErrorReport,
   Memo,
   ParentPageList,
   RestoreProgress,
@@ -170,6 +171,12 @@ export const wailsBackend: Backend = {
   async exportLogs() {
     return await SettingsSvc.ExportLogs();
   },
+  async reportError(report: ErrorReport) {
+    await SettingsSvc.ReportError(report as any);
+  },
+  async errorLogs(): Promise<SyncLog[]> {
+    return ((await SettingsSvc.RecentErrors()) ?? []) as unknown as SyncLog[];
+  },
   async openDataDir() {
     await SettingsSvc.OpenDataDir();
   },
@@ -204,7 +211,12 @@ export const wailsBackend: Backend = {
     return (await SyncSvc.ResolveArchiveTarget(token, target)) as unknown as ArchiveTarget;
   },
   async previewArchiveDatabase(token, target): Promise<ArchiveDatabasePreview> {
-    return (await SyncSvc.PreviewArchiveDatabase(token, target)) as unknown as ArchiveDatabasePreview;
+    const result = (await SyncSvc.PreviewArchiveDatabase(token, target)) as unknown as ArchiveDatabasePreview;
+    return {
+      ...result,
+      missing_properties: result?.missing_properties ?? [],
+      conflicts: result?.conflicts ?? [],
+    };
   },
   async connect(request: ConnectRequest): Promise<ConnectResult> {
     return (await SyncSvc.Connect(request as any)) as unknown as ConnectResult;

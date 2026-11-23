@@ -1,14 +1,24 @@
 import { useEffect, useState } from "react";
-import type { BackupResult, RestoreProgress, Settings, SyncStatus, Tag } from "../types";
+import type { BackupResult, RestoreProgress, Settings, SyncLog, SyncStatus, Tag } from "../types";
 import type { Backend } from "../backend";
 import { onAppEvent } from "../backend";
 import { relativeTime } from "../lib/format";
 import { Onboarding } from "./Onboarding";
 import { CheckIcon, DownloadIcon, RefreshIcon } from "./Icons";
 
-function Card({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Card({
+  title,
+  hint,
+  children,
+  className,
+}: {
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <section className="settings-card">
+    <section className={`settings-card${className ? ` ${className}` : ""}`}>
       <div className="settings-card-head">
         <h3>{title}</h3>
         {hint && <p>{hint}</p>}
@@ -59,6 +69,7 @@ export function SettingsPage({
   const [settings, setSettings] = useState<Settings | null>(null);
   const [sync, setSync] = useState<SyncStatus | null>(null);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [errors, setErrors] = useState<SyncLog[]>([]);
   const [hotkey, setHotkey] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -69,10 +80,16 @@ export function SettingsPage({
   const [restore, setRestore] = useState<RestoreProgress | null>(null);
 
   const reload = async () => {
-    const [s, st, nextTags] = await Promise.all([backend.settings(), backend.syncStatus(), backend.tags()]);
+    const [s, st, nextTags, nextErrors] = await Promise.all([
+      backend.settings(),
+      backend.syncStatus(),
+      backend.tags(),
+      backend.errorLogs().catch(() => [] as SyncLog[]),
+    ]);
     setSettings(s);
     setSync(st);
     setTags(nextTags);
+    setErrors(nextErrors);
     setHotkey(s.hotkey);
   };
 
@@ -179,18 +196,6 @@ export function SettingsPage({
               type="button"
               className="secondary-button"
               disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  setLogsPath(await backend.exportLogs());
-                }, "日志已导出")
-              }
-            >
-              导出日志
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={busy}
               onClick={() => void run(() => backend.rebuildIndex(), "搜索索引已重建")}
             >
               <RefreshIcon size={15} /> 重建搜索索引
@@ -213,11 +218,6 @@ export function SettingsPage({
           {backup && (
             <div className="result-line">
               备份：<code>{backup.path}</code>
-            </div>
-          )}
-          {logsPath && (
-            <div className="result-line">
-              日志：<code>{logsPath}</code>
             </div>
           )}
           <p className="fine-print">本地 SQLite 不加密。需要静态加密时请使用操作系统全盘加密；搜索索引包含分词后的正文。</p>
@@ -374,7 +374,68 @@ export function SettingsPage({
           )}
         </Card>
 
-        <Card title="关于" hint="memo v1 · personal, local-first desktop app">
+        <Card title="错误日志" hint="界面错误会连同堆栈和上下文写入本地日志；导出时会自动隐藏令牌。">
+          <div className="button-row">
+            <button type="button" className="secondary-button" disabled={busy} onClick={() => void reload().catch((e) => onError(e instanceof Error ? e.message : String(e)))}>
+              <RefreshIcon size={15} /> 刷新日志
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  setLogsPath(await backend.exportLogs());
+                }, "错误日志已导出")
+              }
+            >
+              <DownloadIcon size={15} /> 导出错误日志
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={errors.length === 0}
+              onClick={() => {
+                const text = errors
+                  .map((log) => `[${new Date(log.at).toISOString()}] ${log.level} ${log.event}\n${log.message}`)
+                  .join("\n\n");
+                void navigator.clipboard
+                  .writeText(text)
+                  .then(() => setMessage("错误日志已复制"))
+                  .catch((e) => {
+                    const detail = e instanceof Error ? e.message : String(e);
+                    setError(detail);
+                    onError(detail);
+                  });
+              }}
+            >
+              复制日志
+            </button>
+          </div>
+          {errors.length === 0 ? (
+            <div className="muted">还没有错误记录。</div>
+          ) : (
+            <div className="error-log-list">
+              {errors.map((log) => (
+                <details className="error-log-row" key={log.id}>
+                  <summary>
+                    <span>{relativeTime(log.at)}</span>
+                    <em>{log.event}</em>
+                    <p>{log.message.split("\n")[0]}</p>
+                  </summary>
+                  <pre>{log.message}</pre>
+                </details>
+              ))}
+            </div>
+          )}
+          {logsPath && (
+            <div className="result-line">
+              日志：<code>{logsPath}</code>
+            </div>
+          )}
+        </Card>
+
+        <Card className="settings-card-wide" title="关于" hint="memo v1 · personal desktop app">
           <div className="about-grid">
             <div><span>版本</span><strong>{settings.version}</strong></div>
             <div><span>存储</span><strong>SQLite (modernc)</strong></div>

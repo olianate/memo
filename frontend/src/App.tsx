@@ -5,6 +5,7 @@ import { wailsBackend } from "./wailsBackend";
 import { demoBackend } from "./demoBackend";
 import type { Counts, Dashboard, Filter, Memo, SearchResult, Settings, SyncStatus, Tag, ViewId } from "./types";
 import { currentMonth, startOfDayIso, endOfDayIso, relativeTime } from "./lib/format";
+import { installGlobalErrorHandlers, reportError, setErrorSink } from "./lib/errorLog";
 import { Sidebar } from "./components/Sidebar";
 import { Topbar, ViewHeader } from "./components/Header";
 import { Composer } from "./components/Composer";
@@ -17,6 +18,16 @@ import { Onboarding } from "./components/Onboarding";
 import { FilterIcon } from "./components/Icons";
 
 const emptyCounts: Counts = { notes: 0, tags: 0, days: 0 };
+const sidebarPrefKey = "memo.sidebar.open";
+
+function readSidebarOpen(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return window.localStorage.getItem(sidebarPrefKey) !== "0";
+  } catch {
+    return true;
+  }
+}
 
 const viewTitles: Record<ViewId, string> = {
   all: "全部笔记",
@@ -66,8 +77,18 @@ export default function App({ backend }: { backend?: Backend }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
+  const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen);
   const toastTimer = useRef<number | undefined>(undefined);
   const refreshTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    setErrorSink((report) => b.reportError(report));
+    const removeHandlers = installGlobalErrorHandlers();
+    return () => {
+      removeHandlers();
+      setErrorSink(null);
+    };
+  }, [b]);
 
   const scheduleRefresh = useCallback(() => {
     window.clearTimeout(refreshTimer.current);
@@ -76,6 +97,18 @@ export default function App({ backend }: { backend?: Backend }) {
 
   useEffect(() => () => window.clearTimeout(refreshTimer.current), []);
 
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen((open) => {
+      const next = !open;
+      try {
+        window.localStorage.setItem(sidebarPrefKey, next ? "1" : "0");
+      } catch {
+        // The layout preference is optional; ignore storage failures.
+      }
+      return next;
+    });
+  }, []);
+
   const notify = useCallback((message: string) => {
     setToast(message);
     window.clearTimeout(toastTimer.current);
@@ -83,6 +116,7 @@ export default function App({ backend }: { backend?: Backend }) {
   }, []);
 
   const fail = useCallback((message: string) => {
+    reportError(message, { kind: "ui.error_banner" }, "app");
     setError(message);
   }, []);
 
@@ -374,13 +408,15 @@ export default function App({ backend }: { backend?: Backend }) {
 
   return (
     <div className="app-shell">
-      {sidebar}
+      {sidebarOpen && sidebar}
       <div className="main-area">
         <Topbar
           query={query}
           onQuery={setQuery}
           sync={sync && !online ? { ...sync, state: "offline" } : sync}
           theme={(settings?.theme ?? "light") as "light" | "dark" | "system"}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={toggleSidebar}
           onToggleTheme={() => void toggleTheme()}
           onToggleSync={() => void toggleSync()}
         />

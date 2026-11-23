@@ -8,6 +8,7 @@ import type {
   ConnectResult,
   Counts,
   Dashboard,
+  ErrorReport,
   Filter,
   Memo,
   RestoreProgress,
@@ -59,6 +60,8 @@ class DemoStore {
     version: "0.1.0",
   };
   attachments = new Map<string, { data: string; mime: string; thumb?: string }>();
+  errors: SyncLog[] = [];
+  nextErrorID = 1;
   status: SyncStatus = {
     state: "idle",
     enabled: true,
@@ -636,6 +639,22 @@ export const demoBackend: Backend = {
   },
   async exportLogs() {
     return "C:\\Users\\you\\AppData\\Roaming\\memo\\backups\\logs\\sync.log";
+  },
+  async reportError(report: ErrorReport) {
+    const detail = [report.message, report.stack ? `stack:\n${report.stack}` : "", report.context ? `context: ${report.context}` : ""]
+      .filter(Boolean)
+      .join("\n");
+    demo.errors.unshift({
+      id: demo.nextErrorID++,
+      at: iso(now()),
+      level: "error",
+      event: `ui:${report.source || "frontend"}`,
+      message: detail,
+    });
+    demo.errors = demo.errors.slice(0, 50);
+  },
+  async errorLogs() {
+    return demo.errors.map((entry) => ({ ...entry }));
   },
   async openDataDir() {
     return;

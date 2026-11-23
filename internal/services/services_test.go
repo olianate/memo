@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"image"
 	"image/color"
 	"image/png"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -325,6 +328,48 @@ func TestSettingsApplyAndBackup(t *testing.T) {
 	}
 }
 
+func TestSettingsReportErrorRedactsSecrets(t *testing.T) {
+	e := newServiceEnv(t)
+	const token = "ntn_1234567890abcdefSECRET"
+	if err := e.settings.ReportError(ErrorReport{
+		Source:  "onboarding/preview",
+		Message: "无法预览数据库 token=" + token,
+		Stack:   "Error: boom\nAuthorization: Bearer " + token,
+		Context: `{"step":"parent","url":"https://www.notion.so/?token=` + token + `"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	errors, err := e.settings.RecentErrors()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(errors) != 1 {
+		t.Fatalf("errors = %+v", errors)
+	}
+	got := errors[0]
+	if got.Level != "error" || got.Event != "ui:onboarding_preview" {
+		t.Fatalf("entry = %+v", got)
+	}
+	if strings.Contains(got.Message, token) || strings.Contains(got.Message, "ntn_") {
+		t.Fatalf("token leaked into the log: %s", got.Message)
+	}
+	if !strings.Contains(got.Message, "context:") || !strings.Contains(got.Message, "stack:") {
+		t.Fatalf("diagnostic detail missing: %s", got.Message)
+	}
+	path, err := e.settings.ExportLogs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	errorLog := filepath.Join(filepath.Dir(path), "errors.log")
+	content, err := os.ReadFile(errorLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(content, []byte("ui:onboarding_preview")) || bytes.Contains(content, []byte("ntn_")) {
+		t.Fatalf("errors.log = %s", content)
+	}
+}
+
 func TestSyncResolveArchiveTargetAcceptsLinks(t *testing.T) {
 	e := newServiceEnv(t)
 	gw := fake.New()
@@ -582,6 +627,18 @@ func TestSyncConnectReadySharedDatabaseNeedsNoConfirmation(t *testing.T) {
 	}
 	if len(preview.MissingProperties) != 0 || len(preview.Conflicts) != 0 {
 		t.Fatalf("preview = %+v", preview)
+	}
+	// Regression: nil slices marshal to JSON null, which crashed the onboarding
+	// screen when a shared database already had every memo property.
+	if preview.MissingProperties == nil || preview.Conflicts == nil {
+		t.Fatalf("preview returned nil slices: %+v", preview)
+	}
+	raw, err := json.Marshal(preview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(raw, []byte(`"missing_properties":[]`)) || !bytes.Contains(raw, []byte(`"conflicts":[]`)) {
+		t.Fatalf("preview JSON uses null arrays: %s", raw)
 	}
 	if _, err := e.sync.Connect(ConnectRequest{Token: "tok", Kind: "database", TargetID: dsID}); err != nil {
 		t.Fatal(err)
