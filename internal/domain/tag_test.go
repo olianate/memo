@@ -46,4 +46,14 @@ func TestNormalizeTag(t *testing.T) {
 	if CleanTagName("  #工作  ") != "工作" {
 		t.Fatalf("clean = %q", CleanTagName("  #工作  "))
 	}
+	// Full-width input from a CJK IME folds onto the same key as plain ASCII.
+	for _, in := range []string{"memo", "ｍｅｍｏ", "Ｍｅｍｏ", "＃memo"} {
+		if got := NormalizeTag(in); got != "memo" {
+			t.Fatalf("NormalizeTag(%q) = %q, want memo", in, got)
+		}
+	}
+	// The ideographic space is whitespace, not part of the tag.
+	if got := NormalizeTag("\u3000#ｍｅｍｏ\u3000"); got != "memo" {
+		t.Fatalf("ideographic space: %q", got)
+	}
 }

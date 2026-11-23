@@ -8,16 +8,16 @@
     !define INFO_PROJECTNAME "memo"
 !endif
 !ifndef INFO_COMPANYNAME
-    !define INFO_COMPANYNAME "memo"
+    !define INFO_COMPANYNAME "olianate"
 !endif
 !ifndef INFO_PRODUCTNAME
     !define INFO_PRODUCTNAME "memo"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "0.1.0"
+    !define INFO_PRODUCTVERSION "1.0.0"
 !endif
 !ifndef INFO_COPYRIGHT
-    !define INFO_COPYRIGHT "(c) 2026, memo"
+    !define INFO_COPYRIGHT "(c) 2026 olianate"
 !endif
 !ifndef PRODUCT_EXECUTABLE
     !define PRODUCT_EXECUTABLE "${INFO_PROJECTNAME}.exe"

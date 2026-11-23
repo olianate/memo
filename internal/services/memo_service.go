@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	"memo/internal/attachments"
-	"memo/internal/domain"
-	"memo/internal/store"
-	"memo/internal/sync"
+	"github.com/olianate/memo/internal/attachments"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/store"
+	"github.com/olianate/memo/internal/sync"
 )
 
 // MemoService is the capture, edit, delete and attachment boundary.

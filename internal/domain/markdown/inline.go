@@ -3,7 +3,7 @@ package markdown
 import (
 	"strings"
 
-	"memo/internal/domain"
+	"github.com/olianate/memo/internal/domain"
 )
 
 // parseInline turns the supported inline Markdown into flat spans. Unmatched

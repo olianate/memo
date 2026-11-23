@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"memo/internal/domain"
+	"github.com/olianate/memo/internal/domain"
 )
 
 // ApplyRemoteDelete applies a Status=deleted tombstone without enqueueing a

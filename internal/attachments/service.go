@@ -26,10 +26,10 @@ import (
 	xdraw "golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 
-	"memo/internal/config"
-	"memo/internal/domain"
-	"memo/internal/platform"
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/config"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/platform"
+	"github.com/olianate/memo/internal/store"
 )
 
 const (

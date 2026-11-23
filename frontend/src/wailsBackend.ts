@@ -19,13 +19,13 @@ import type {
 import type { Backend } from "./backend";
 
 // The generated bindings are JSDoc-typed JavaScript modules.
-import * as MemoSvc from "../bindings/memo/internal/services/memoservice.js";
-import * as TagSvc from "../bindings/memo/internal/services/tagservice.js";
-import * as SearchSvc from "../bindings/memo/internal/services/searchservice.js";
-import * as StatsSvc from "../bindings/memo/internal/services/statsservice.js";
-import * as SettingsSvc from "../bindings/memo/internal/services/settingsservice.js";
-import * as SyncSvc from "../bindings/memo/internal/services/syncservice.js";
-import * as PlatformSvc from "../bindings/memo/internal/services/platformservice.js";
+import * as MemoSvc from "../bindings/github.com/olianate/memo/internal/services/memoservice.js";
+import * as TagSvc from "../bindings/github.com/olianate/memo/internal/services/tagservice.js";
+import * as SearchSvc from "../bindings/github.com/olianate/memo/internal/services/searchservice.js";
+import * as StatsSvc from "../bindings/github.com/olianate/memo/internal/services/statsservice.js";
+import * as SettingsSvc from "../bindings/github.com/olianate/memo/internal/services/settingsservice.js";
+import * as SyncSvc from "../bindings/github.com/olianate/memo/internal/services/syncservice.js";
+import * as PlatformSvc from "../bindings/github.com/olianate/memo/internal/services/platformservice.js";
 
 const asMemo = (m: any): Memo => ({
   ...m,

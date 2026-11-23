@@ -13,7 +13,7 @@
            Name="memo"
            Language="1033"
            Version="$(var.Version)"
-           Manufacturer="memo"
+           Manufacturer="olianate"
            UpgradeCode="194DB142-4D91-4730-82C9-859DC8D495F6">
     <Package InstallerVersion="500"
              Compressed="yes"

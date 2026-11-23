@@ -1,8 +1,8 @@
 package services
 
 import (
-	"memo/internal/domain"
-	"memo/internal/domain/markdown"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/domain/markdown"
 )
 
 func markdownParse(source string) []domain.Block     { return markdown.Parse(source) }

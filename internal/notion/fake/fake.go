@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"memo/internal/notion"
+	"github.com/olianate/memo/internal/notion"
 )
 
 // Gateway is a deterministic, in-memory archive.

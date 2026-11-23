@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"memo/internal/domain"
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/store"
 )
 
 func testStats(t *testing.T) (*Service, *store.Store) {

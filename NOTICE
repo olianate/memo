@@ -1,0 +1,20 @@
+memo
+Copyright (c) 2026 olianate
+
+This product includes third-party software.
+
+Bundled source:
+
+  Wails v3 (https://github.com/wailsapp/wails) — MIT.
+  A modified copy is vendored at third_party/wails: it carries the IME/focus
+  patch from https://github.com/wailsapp/wails/pull/6596 (see
+  docs/adr/0002-pin-wails-with-ime-patch.md). The upstream MIT license is
+  retained at third_party/wails/LICENSE and applies to that directory.
+
+  Inter typeface — SIL Open Font License 1.1.
+  See frontend/Inter Font License.txt.
+
+Linked libraries and build dependencies (permissive licenses, mostly MIT/BSD/
+ISC/Apache-2.0) are listed with their versions in go.mod and
+frontend/package.json. Release binaries are built from this repository by
+.github/workflows/release.yml.

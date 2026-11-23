@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"memo/internal/search"
-	"memo/internal/stats"
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/search"
+	"github.com/olianate/memo/internal/stats"
+	"github.com/olianate/memo/internal/store"
 )
 
 // SearchService wraps the local FTS/LIKE search.

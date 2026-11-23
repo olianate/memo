@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"memo/internal/domain"
+	"github.com/olianate/memo/internal/domain"
 )
 
 func spans(text string, marks ...string) []domain.Span {

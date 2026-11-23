@@ -5,7 +5,7 @@
 		<key>CFBundleExecutable</key>
 		<string>memo</string>
 		<key>CFBundleGetInfoString</key>
-		<string>Personal local-first memo app</string>
+		<string>Local-first memos with an optional Notion archive</string>
 		<key>CFBundleIconFile</key>
 		<string>icons</string>
 		<key>CFBundleIconName</key>
@@ -25,6 +25,6 @@
 		<key>NSHighResolutionCapable</key>
 		<string>true</string>
 		<key>NSHumanReadableCopyright</key>
-		<string>(c) 2026, memo</string>
+		<string>(c) 2026 olianate</string>
 	</dict>
 </plist>

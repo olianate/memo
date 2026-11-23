@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"memo/internal/config"
-	"memo/internal/notion"
-	"memo/internal/store"
-	syncengine "memo/internal/sync"
+	"github.com/olianate/memo/internal/config"
+	"github.com/olianate/memo/internal/notion"
+	"github.com/olianate/memo/internal/store"
+	syncengine "github.com/olianate/memo/internal/sync"
 )
 
 // WorkspaceDTO is the validated Notion workspace summary.

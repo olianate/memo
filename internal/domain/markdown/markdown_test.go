@@ -3,7 +3,7 @@ package markdown
 import (
 	"testing"
 
-	"memo/internal/domain"
+	"github.com/olianate/memo/internal/domain"
 )
 
 func types(blocks []domain.Block) []domain.BlockType {

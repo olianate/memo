@@ -7,7 +7,7 @@
 [![Release](https://img.shields.io/github/v/release/olianate/memo?label=release)](https://github.com/olianate/memo/releases/latest)  
 [![Release workflow](https://github.com/olianate/memo/actions/workflows/release.yml/badge.svg)](https://github.com/olianate/memo/actions/workflows/release.yml)
 
-![memo 主界面](https://file%2B.vscode-resource.vscode-cdn.net/d%3A/dev/memo/docs/screenshots/timeline.png)
+![memo 主界面](docs/screenshots/timeline.png)
 
 笔记、搜索、标签和统计都存在本地 SQLite 中，离线可用；Notion 只是可选的长期归档。
 
@@ -21,9 +21,9 @@
 
 | 编辑笔记 | 快速记录 |
 | --- | --- |
-|  |  |
+| ![编辑笔记](docs/screenshots/editor.png) | ![快速记录](docs/screenshots/quick-capture.png) |
 
-![记录统计](https://file%2B.vscode-resource.vscode-cdn.net/d%3A/dev/memo/docs/screenshots/stats.png)
+![记录统计](docs/screenshots/stats.png)
 
 ## 下载
 
@@ -68,6 +68,14 @@ wails3 build   # 生产构建，嵌入 frontend/dist
 
 安装包与发布流程（MSI / NSIS / DMG、`SHA256SUMS.txt`、推送 `v*` tag 触发的 workflow）见  
 [`docs/development.md`](docs/development.md)。
+
+## 文档
+
+- [`docs/development.md`](docs/development.md)：实现、Notion 行为和打包细节
+- [`GLOSSARY.md`](GLOSSARY.md)：领域术语
+- [`docs/adr/`](docs/adr/)：架构决策记录
+- [`SMOKE.md`](SMOKE.md)：发布前人工检查清单
+- [`NOTICE`](NOTICE)：第三方组件与许可证
 
 ## 许可证
 

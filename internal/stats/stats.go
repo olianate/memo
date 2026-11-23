@@ -9,8 +9,8 @@ import (
 	"time"
 	"unicode"
 
-	"memo/internal/domain"
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/store"
 )
 
 // Service builds dashboard snapshots.

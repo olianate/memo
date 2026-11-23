@@ -13,10 +13,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"memo/internal/config"
-	"memo/internal/domain"
-	"memo/internal/platform"
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/config"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/platform"
+	"github.com/olianate/memo/internal/store"
 )
 
 func block(t domain.BlockType, text string, extra func(*domain.Block)) domain.Block {

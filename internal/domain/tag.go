@@ -84,13 +84,28 @@ func RemoveTagToken(text string, start, end int) string {
 	return before + after
 }
 
-// NormalizeTag is the case-insensitive, NFC-ish comparison key. Vietnamese and
-// Chinese display casing is preserved separately in Tag.Name.
+// NormalizeTag is the case-insensitive comparison key. Display casing and width
+// are preserved in Tag.Name; only the key is folded.
 func NormalizeTag(name string) string {
-	name = strings.TrimPrefix(strings.TrimSpace(name), "#")
-	// Notion multi-select options are case-insensitive; lower-casing is enough
-	// for the tag vocabulary this app supports.
-	return strings.ToLower(name)
+	return strings.ToLower(CleanTagName(foldWidth(name)))
+}
+
+// foldWidth applies the width half of NFKC to the ranges CJK input methods emit
+// in practice: full-width ASCII (U+FF01..U+FF5E) becomes ASCII and the
+// ideographic space becomes a normal space, so "ｍｅｍｏ" and "memo" share one
+// tag. Compatibility ideographs, ligatures and half-width katakana are out of
+// scope: the standard library has no NFKC and golang.org/x/text is not worth a
+// dependency for this one call.
+func foldWidth(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\u3000':
+			return ' '
+		case r >= '\uFF01' && r <= '\uFF5E':
+			return r - 0xFEE0
+		}
+		return r
+	}, s)
 }
 
 // CleanTagName strips a leading # and surrounding whitespace.

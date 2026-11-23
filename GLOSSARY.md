@@ -1,6 +1,6 @@
 # memo
 
-A personal, local-first desktop memo app that can archive synced notes in Notion.
+A local-first desktop memo app that can archive synced notes in Notion.
 
 ## Language
 

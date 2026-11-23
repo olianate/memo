@@ -7,11 +7,11 @@
 		"0409": {
 			"FileVersion": "1.0.0",
 			"ProductVersion": "1.0.0",
-			"CompanyName": "memo",
+			"CompanyName": "olianate",
 			"FileDescription": "Local-first memos with a Notion archive",
-			"LegalCopyright": "(c) 2026, memo",
+			"LegalCopyright": "(c) 2026 olianate",
 			"ProductName": "memo",
-			"Comments": "Personal local-first memo app"
+			"Comments": "Local-first memos with an optional Notion archive"
 		}
 	}
 }

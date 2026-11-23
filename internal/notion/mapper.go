@@ -7,7 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"memo/internal/domain"
+	"github.com/olianate/memo/internal/domain"
 )
 
 // TitlePropertyName is the app-created title property. The name is stored after

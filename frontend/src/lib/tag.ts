@@ -51,6 +51,17 @@ export function removeTagToken(text: string, start: number, end: number): string
   return before + after;
 }
 
+/** Mirrors domain.NormalizeTag: fold width, drop a leading #, lower-case. */
+export function normalizeTag(name: string): string {
+  return name
+    .replace(/[\uFF01-\uFF5E]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+    .replace(/\u3000/g, " ")
+    .trim()
+    .replace(/^#/, "")
+    .trim()
+    .toLowerCase();
+}
+
 export interface InputRule {
   type: "heading" | "bullet" | "ordered" | "todo" | "quote" | "code";
   level?: number;
@@ -81,9 +92,4 @@ export function matchInputRule(text: string): InputRule | null {
     default:
       return null;
   }
-}
-
-/** True when the heading marker is the only thing before the caret. */
-export function isHeadingMarker(text: string, caret: number): boolean {
-  return caret === text.length && /^#{1,3}$/.test(text);
 }

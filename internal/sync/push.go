@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"os"
 
-	"memo/internal/config"
-	"memo/internal/domain"
-	"memo/internal/notion"
+	"github.com/olianate/memo/internal/config"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/notion"
 )
 
 // PushOnce drains up to 20 due outbox rows. Pushing is single-concurrency to
@@ -150,7 +150,6 @@ func (s *Service) pushOne(ctx context.Context, g notion.Gateway, ds string, memo
 	}
 
 	pageID := memo.NotionPageID
-	created := false
 	if pageID == "" {
 		found, err := s.findPageByMemoID(ctx, g, ds, memo.ID)
 		if err != nil {
@@ -179,7 +178,6 @@ func (s *Service) pushOne(ctx context.Context, g notion.Gateway, ds string, memo
 			return err
 		}
 		pageID = page.ID
-		created = true
 		if err := s.store.SetNotionPageID(ctx, memo.ID, pageID); err != nil {
 			return err
 		}
@@ -197,7 +195,7 @@ func (s *Service) pushOne(ctx context.Context, g notion.Gateway, ds string, memo
 		}
 		// The body is replaced only when the local revision moved past what was
 		// last pushed. Adoption sets BaseRevision=0, so the first update replaces.
-		if created || memo.Revision != memo.BaseRevision {
+		if memo.Revision != memo.BaseRevision {
 			if err := s.replaceChildren(ctx, g, pageID, mapped); err != nil {
 				return err
 			}

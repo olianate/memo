@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"memo/internal/domain"
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/store"
 )
 
 // MemoDTO is the frontend view of a memo.

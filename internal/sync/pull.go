@@ -8,9 +8,9 @@ import (
 	"path"
 	"time"
 
-	"memo/internal/domain"
-	"memo/internal/notion"
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/notion"
+	"github.com/olianate/memo/internal/store"
 )
 
 // PullOnce fetches changes since the stored cursor with a 10-minute overlap.

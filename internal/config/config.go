@@ -6,7 +6,7 @@ import (
 	"context"
 	"strconv"
 
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/store"
 )
 
 // Keys used across the app. Values are strings on disk; helpers parse them.

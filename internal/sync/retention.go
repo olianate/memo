@@ -5,9 +5,9 @@ import (
 	"errors"
 	"time"
 
-	"memo/internal/config"
-	"memo/internal/domain"
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/config"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/store"
 )
 
 // RetentionPolicy is the eviction configuration.

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"memo/internal/domain"
+	"github.com/olianate/memo/internal/domain"
 )
 
 // Setting reads one key. The second result reports presence.

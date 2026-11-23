@@ -5,7 +5,7 @@ package markdown
 import (
 	"strings"
 
-	"memo/internal/domain"
+	"github.com/olianate/memo/internal/domain"
 )
 
 // Parse converts Markdown source into blocks. Block IDs are freshly generated;

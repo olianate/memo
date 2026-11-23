@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"memo/internal/domain"
+	"github.com/olianate/memo/internal/domain"
 )
 
 // CreateAttachment inserts attachment metadata. Bytes are written by the

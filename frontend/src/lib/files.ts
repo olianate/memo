@@ -12,21 +12,3 @@ export async function fileToBase64(file: File): Promise<{ name: string; mime: st
     data: btoa(binary),
   };
 }
-
-export function clipboardFiles(event: ClipboardEvent): File[] {
-  const items = event.clipboardData?.items;
-  if (!items) return [];
-  const files: File[] = [];
-  for (const item of Array.from(items)) {
-    if (item.kind === "file") {
-      const file = item.getAsFile();
-      if (file) files.push(file);
-    }
-  }
-  return files;
-}
-
-export function droppedFiles(event: DragEvent): File[] {
-  const files = event.dataTransfer?.files;
-  return files ? Array.from(files) : [];
-}

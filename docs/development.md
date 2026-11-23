@@ -69,6 +69,20 @@ go build -tags production -o bin/memo-demo.exe .
 .\bin\memo-demo.exe
 ```
 
+### Generated bindings
+
+`frontend/bindings/` is committed and mirrors the Go import path, so the module
+path in `go.mod` decides its layout
+(`frontend/bindings/github.com/olianate/memo/internal/...`). After changing a
+bound service or DTO, regenerate before committing:
+
+```powershell
+wails3 task common:generate:bindings
+```
+
+The task runs `wails3 generate bindings -clean`, which deletes and rewrites the
+whole tree. Never hand-edit those files.
+
 ## Notion setup
 
 1. Create a Notion integration and copy its personal access token.
@@ -167,11 +181,17 @@ committed for hosts that cannot run `actool`.
 
 ### GitHub Actions
 
-`.github/workflows/release.yml` runs on `v*` tags. It runs the backend and
-frontend tests, builds the Windows NSIS + MSI packages, builds the macOS
-universal DMG, writes `SHA256SUMS.txt` and publishes a GitHub Release with the
-stable asset names used by the README download links. The workflow can also be
-triggered manually to exercise the build jobs without publishing.
+`.github/workflows/ci.yml` runs on every push to `main` and on every pull
+request: `gofmt`, `go build ./...`, `go vet ./...`, `go test ./internal/...`,
+`npx tsc --noEmit` and `npm test`. It is also the single definition of the test
+steps, so it can be called as a reusable workflow.
+
+`.github/workflows/release.yml` runs on `v*` tags and reuses `ci.yml` for its
+`verify` job, then checks the tag against `build/config.yml`, builds the Windows
+NSIS + MSI packages, builds the macOS universal DMG, writes `SHA256SUMS.txt` and
+publishes a GitHub Release with the stable asset names used by the README
+download links. The workflow can also be triggered manually to exercise the
+build jobs without publishing.
 
 ## Verification
 

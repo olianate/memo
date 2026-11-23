@@ -9,8 +9,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"memo/internal/domain"
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/store"
 )
 
 // Service searches memos and tags. The index is local and survives eviction.

@@ -17,15 +17,15 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 
-	"memo/internal/attachments"
-	"memo/internal/config"
-	"memo/internal/domain"
-	"memo/internal/platform"
-	"memo/internal/search"
-	"memo/internal/services"
-	"memo/internal/stats"
-	"memo/internal/store"
-	syncengine "memo/internal/sync"
+	"github.com/olianate/memo/internal/attachments"
+	"github.com/olianate/memo/internal/config"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/platform"
+	"github.com/olianate/memo/internal/search"
+	"github.com/olianate/memo/internal/services"
+	"github.com/olianate/memo/internal/stats"
+	"github.com/olianate/memo/internal/store"
+	syncengine "github.com/olianate/memo/internal/sync"
 )
 
 //go:embed all:frontend/dist
@@ -96,7 +96,8 @@ func main() {
 		Description: "Local-first memos with a Notion archive",
 		Icon:        appIcon,
 		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: "com.memo.local-first",
+			// Must match build/config.yml productIdentifier (and CFBundleIdentifier).
+			UniqueID: "com.memo.app",
 			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
 				hooks.ShowMainWindow()
 			},

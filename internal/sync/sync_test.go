@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"memo/internal/config"
-	"memo/internal/domain"
-	"memo/internal/notion"
-	"memo/internal/notion/fake"
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/config"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/notion"
+	"github.com/olianate/memo/internal/notion/fake"
+	"github.com/olianate/memo/internal/store"
 )
 
 type memSecrets struct{ token string }

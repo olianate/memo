@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"memo/internal/config"
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/config"
+	"github.com/olianate/memo/internal/store"
 )
 
 // Hooks are the small set of platform actions the settings screen needs.

@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"memo/internal/config"
-	"memo/internal/domain"
-	"memo/internal/notion"
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/config"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/notion"
+	"github.com/olianate/memo/internal/store"
 )
 
 // Secrets is the keychain port. The token is never persisted in SQLite.

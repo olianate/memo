@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"memo/internal/config"
-	"memo/internal/domain"
-	"memo/internal/store"
+	"github.com/olianate/memo/internal/config"
+	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/store"
 )
 
 func testService(t *testing.T) (*Service, *store.Store, string) {

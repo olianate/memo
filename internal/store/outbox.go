@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"memo/internal/domain"
+	"github.com/olianate/memo/internal/domain"
 )
 
 // DueOutbox returns the next pending rows that may be attempted now.

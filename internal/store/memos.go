@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"memo/internal/domain"
+	"github.com/olianate/memo/internal/domain"
 )
 
 type querier interface {

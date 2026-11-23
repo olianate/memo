@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Counts, DayCount, Tag, ViewId } from "../types";
+import { normalizeTag } from "../lib/tag";
 import { Heatmap } from "./common";
 import {
   CloudIcon,
@@ -87,11 +88,7 @@ export function Sidebar({
               </div>
             );
           }
-          const badge =
-            f.key === "notes" ? counts.notes :
-            f.key === "local" ? undefined :
-            f.key === "synced" ? undefined :
-            undefined;
+          const badge = f.key === "notes" ? counts.notes : undefined;
           return (
             <button
               type="button"
@@ -116,7 +113,7 @@ export function Sidebar({
           <button
             type="button"
             key={tag.id}
-            className={`tag-row ${activeTag.toLowerCase() === tag.normalized ? "is-active" : ""}`}
+            className={`tag-row ${normalizeTag(activeTag) === tag.normalized ? "is-active" : ""}`}
             onClick={() => onTag(tag.name)}
           >
             <span>#{tag.name}</span>

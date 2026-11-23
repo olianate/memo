@@ -1,4 +1,4 @@
-module memo
+module github.com/olianate/memo
 
 go 1.26.0
 

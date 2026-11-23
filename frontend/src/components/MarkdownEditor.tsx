@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Attachment, Block } from "../types";
 import type { Backend } from "../backend";
 import { inlineMarkdownToSpans, removeSpanRange, spansFromDOM, spansToHtml, blockText } from "../lib/markdown";
-import { extractTagToken, matchInputRule, removeTagToken, type TagToken } from "../lib/tag";
+import { extractTagToken, matchInputRule, normalizeTag, removeTagToken, type TagToken } from "../lib/tag";
 import { humanBytes } from "../lib/format";
 import { CloseIcon, FileIcon, ImageIcon, PaperclipIcon, PlusIcon } from "./Icons";
 
@@ -169,7 +169,7 @@ export function MarkdownEditor({
     (raw: string) => {
       const name = raw.trim().replace(/^#+/, "").trim();
       if (!name) return;
-      if (tags.some((tag) => tag.toLowerCase() === name.toLowerCase())) return;
+      if (tags.some((tag) => normalizeTag(tag) === normalizeTag(name))) return;
       onTagsChange([...tags, name]);
     },
     [onTagsChange, tags],
@@ -185,7 +185,7 @@ export function MarkdownEditor({
       const nextText = removeTagToken(text, token.start, token.end);
       const nextSpans = removeSpanRange(block.spans ?? [], token.start, token.end);
       updateBlock(token.blockId, { spans: nextSpans });
-      const exists = tags.some((t) => t.toLowerCase() === name.toLowerCase());
+      const exists = tags.some((t) => normalizeTag(t) === normalizeTag(name));
       if (!exists) onTagsChange([...tags, name]);
       setTagToken(null);
       setSuggestions([]);

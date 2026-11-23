@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"memo/internal/domain"
+	"github.com/olianate/memo/internal/domain"
 )
 
 // setMemoTags replaces a memo's tag set, creating tags on demand and removing
