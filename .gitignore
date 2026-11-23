@@ -32,6 +32,10 @@ third_party/wails/internal/generator/testdata/
 # Generated Wails installer bootstrapper
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 
+# macOS 26 icon bundle: compiled from build/appicon.icon by actool (Xcode 26+) during
+# `generate:icons` on macOS. Regenerated per build, so it is not committed.
+build/darwin/Assets.car
+
 # Logs and local secrets
 **/*.log
 **/*.tmp

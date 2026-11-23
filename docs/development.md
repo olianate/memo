@@ -141,6 +141,30 @@ Unsigned builds need right-click → Open the first time. macOS IME behavior is 
 accepted, untested risk (gate 11 was waived for macOS); test on a Mac before any
 release. Auto-update is out of scope for v1: reinstall manually.
 
+#### macOS icon (Icon Composer)
+
+`build/appicon.icon` is an Icon Composer document for the macOS 26 icon style: a
+green gradient fill, the `memo_glyph.png` layer, a neutral shadow and the
+specular highlight. On macOS with Xcode 26+, `generate:icons` compiles it with
+`actool` into `build/darwin/Assets.car` and rewrites `build/darwin/icons.icns`
+from the same document; `create:app:bundle` copies both into the bundle, and
+`CFBundleIconName=appicon` (`build/darwin/Info*.plist`, mirrored by
+`info.cfBundleIconName` in `build/config.yml`) selects the asset-catalog icon.
+
+```bash
+# what generate:icons runs on macOS
+cd build
+wails3 generate icons -input appicon.png -macfilename darwin/icons.icns \
+  -windowsfilename windows/icon.ico \
+  -iconcomposerinput appicon.icon -macassetdir darwin
+```
+
+Without Xcode 26 the compilation is skipped and the `.app` keeps the PNG-derived
+`icons.icns`: the app still runs, but macOS 26 shows the flat icon. The release
+workflow prints a warning when `Assets.car` is missing. Both outputs are
+regenerated per build, so `Assets.car` is gitignored while `icons.icns` stays
+committed for hosts that cannot run `actool`.
+
 ### GitHub Actions
 
 `.github/workflows/release.yml` runs on `v*` tags. It runs the backend and

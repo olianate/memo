@@ -88,14 +88,43 @@ jobs:
 
       - name: Install NSIS
         shell: pwsh
-        run: choco install nsis --no-progress -y
+        run: |
+          choco install nsis --no-progress --limit-output -y
+          if ($LASTEXITCODE -ne 0) { throw "choco install nsis failed with exit code $LASTEXITCODE" }
+
+          # The chocolatey package runs the NSIS installer into Program Files and
+          # updates the *machine* PATH. This step's process - and therefore every
+          # later step, which inherits the runner's original environment - keeps
+          # the old PATH, so `makensis` stays invisible even though it exists.
+          # Resolve the binary explicitly and publish the directory to the job.
+          $programRoots = @(${env:ProgramFiles(x86)}, $env:ProgramFiles) | Where-Object { $_ }
+          $nsisDir = $programRoots |
+            ForEach-Object { Join-Path $_ 'NSIS' } |
+            Where-Object { Test-Path (Join-Path $_ 'makensis.exe') } |
+            Select-Object -First 1
+
+          if (-not $nsisDir) {
+            $found = Get-ChildItem -Path $programRoots -Filter makensis.exe -Recurse -Depth 3 -ErrorAction SilentlyContinue |
+              Select-Object -First 1
+            if ($found) { $nsisDir = $found.DirectoryName }
+          }
+          if (-not $nsisDir) { throw 'NSIS was installed but makensis.exe was not found' }
+
+          & (Join-Path $nsisDir 'makensis.exe') -VERSION
+          if ($LASTEXITCODE -ne 0) { throw "makensis.exe at $nsisDir failed to run (exit $LASTEXITCODE)" }
+
+          "NSIS_BIN=$nsisDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Add-Content -Path $env:GITHUB_PATH -Value $nsisDir
+          Write-Output "NSIS ready: $nsisDir"
 
       - name: Build Windows binary and NSIS installer
         shell: pwsh
         run: |
           $bin = go env GOBIN
           if (-not $bin) { $bin = Join-Path (go env GOPATH) "bin" }
-          $env:PATH = "$bin;$env:PATH"
+          # NSIS_BIN comes from the previous step; keep GOBIN first for wails3.
+          $env:PATH = "$bin;$env:NSIS_BIN;$env:PATH"
+          Get-Command makensis -ErrorAction Stop | ForEach-Object { Write-Output "makensis: $($_.Source)" }
           wails3 package INSTALL_SCOPE=user
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -162,6 +191,26 @@ jobs:
           [ -n "$bindir" ] || bindir="$(go env GOPATH)/bin"
           export PATH="$bindir:$PATH"
           wails3 task darwin:package:universal
+
+      - name: Verify the macOS 26 icon bundle
+        run: |
+          set -euo pipefail
+          app="bin/memo.app"
+          test -d "$app" || { echo "::error::$app was not produced"; exit 1; }
+
+          /usr/bin/actool --version 2>/dev/null || true
+
+          if /usr/bin/plutil -extract CFBundleIconName raw -o - "$app/Contents/Info.plist" 2>/dev/null | grep -qx appicon; then
+            echo "Info.plist: CFBundleIconName=appicon"
+          else
+            echo "::warning file=build/darwin/Info.plist::CFBundleIconName is missing from the app bundle"
+          fi
+
+          if [ -f "$app/Contents/Resources/Assets.car" ]; then
+            echo "Assets.car: present ($(wc -c < "$app/Contents/Resources/Assets.car") bytes)"
+          else
+            echo "::warning::Assets.car missing - the macOS 26 icon style needs actool 26+ (Xcode 26); this build fell back to icons.icns"
+          fi
 
       - name: Build DMG
         run: |

@@ -191,16 +191,17 @@ tasks:
       - wails3 generate bindings -f '{{.BUILD_FLAGS}}' -clean=true{{if eq .OBFUSCATED "true"}} -obfuscated{{end}} -ts -i
 
   generate:icons:
-    summary: Generates Windows `.ico` and macOS `.icns` from appicon.png.
+    summary: Generates Windows `.ico` and macOS `.icns` from appicon.png. On macOS with Xcode 26+ it also compiles `appicon.icon` (Icon Composer) into `darwin/Assets.car` and rewrites `darwin/icons.icns` from it, which is what gives the Dock the macOS 26 icon style; other hosts skip that step and keep the PNG-derived `.icns`.
     run: once
     dir: build
     sources:
       - "appicon.png"
+      - "appicon.icon"
     generates:
       - "darwin/icons.icns"
       - "windows/icon.ico"
     cmds:
-      - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico
+      - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico -iconcomposerinput appicon.icon -macassetdir darwin
 
   dev:frontend:
     summary: Runs the frontend in development mode
