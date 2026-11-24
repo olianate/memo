@@ -19,6 +19,13 @@ import * as store$0 from "../store/models.js";
 import * as $models from "./models.js";
 
 /**
+ * ClearLogs deletes every local sync and error log entry.
+ */
+export function ClearLogs(): $CancellablePromise<void> {
+    return $Call.ByID(2126324787);
+}
+
+/**
  * CompleteOnboarding marks first-run setup as done (skip or Notion connect).
  */
 export function CompleteOnboarding(): $CancellablePromise<void> {

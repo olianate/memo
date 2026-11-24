@@ -253,6 +253,11 @@ func (s *SettingsService) ExportBackup() (BackupResult, error) {
 	return BackupResult{Path: dir, Bytes: size, At: time.Now().Local().Format(time.RFC3339)}, nil
 }
 
+// ClearLogs deletes every local sync and error log entry.
+func (s *SettingsService) ClearLogs() error {
+	return s.store.ClearLogs(context.Background())
+}
+
 // ExportLogs writes the bounded activity log plus an error-only log to a
 // timestamped folder. A short header makes the file useful when a user shares
 // it for troubleshooting.

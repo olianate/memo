@@ -444,7 +444,7 @@ export function SettingsPage({
               {sync?.last_error && <div className="inline-error">{sync.last_error}</div>}
               <div className="sync-logs">
                 <h4>最近同步事件</h4>
-                {(sync?.logs ?? []).slice(0, 8).map((log) => (
+                {(sync?.logs ?? []).slice(0, 5).map((log) => (
                   <div className={`sync-log is-${log.level}`} key={log.id}>
                     <span>{relativeTime(log.at)}</span>
                     <em>{log.event}</em>
@@ -502,10 +502,21 @@ export function SettingsPage({
           <p className="fine-print">仅监听 127.0.0.1，不对局域网开放；没有额外鉴权，本机进程均可访问。端点路径为 /mcp，提供 search_memos、create_memo、update_memo、delete_memo 工具。</p>
         </Card>
 
-        <Card title="错误日志" hint="界面错误会连同堆栈和上下文写入本地日志；导出时会自动隐藏令牌。">
+        <Card title="错误日志" hint="同步事件与界面错误共用本地日志；导出时会自动隐藏令牌。">
           <div className="button-row">
             <button type="button" className="secondary-button" disabled={busy} onClick={() => void reload().catch((e) => onError(e instanceof Error ? e.message : String(e)))}>
               <RefreshIcon size={15} /> 刷新日志
+            </button>
+            <button
+              type="button"
+              className="secondary-button danger"
+              disabled={busy || (errors.length === 0 && (sync?.logs ?? []).length === 0)}
+              onClick={() => {
+                if (!window.confirm("清空本地日志？同步事件和错误记录都会被删除，此操作不可撤销。")) return;
+                void run(() => backend.clearLogs(), "日志已清空");
+              }}
+            >
+              清空日志
             </button>
             <button
               type="button"

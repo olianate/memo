@@ -175,6 +175,9 @@ export const wailsBackend: Backend = {
   async exportLogs() {
     return await SettingsSvc.ExportLogs();
   },
+  async clearLogs() {
+    await SettingsSvc.ClearLogs();
+  },
   async reportError(report: ErrorReport) {
     await SettingsSvc.ReportError(report as any);
   },

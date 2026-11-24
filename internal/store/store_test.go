@@ -493,3 +493,23 @@ func TestCounts(t *testing.T) {
 		t.Fatalf("counts = %d %d %d", notes, tags, days)
 	}
 }
+
+func TestClearLogs(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	if err := s.Log(ctx, "info", "sync.push", "pushed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Log(ctx, "error", "sync.pull", "failed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ClearLogs(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if logs, err := s.Logs(ctx, 10); err != nil || len(logs) != 0 {
+		t.Fatalf("logs = %+v %v", logs, err)
+	}
+	if errors, err := s.Errors(ctx, 10); err != nil || len(errors) != 0 {
+		t.Fatalf("errors = %+v %v", errors, err)
+	}
+}

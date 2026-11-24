@@ -36,6 +36,58 @@ describe("SettingsPage MCP", () => {
   });
 });
 
+describe("SettingsPage logs", () => {
+  it("clears local sync and error logs after confirmation", async () => {
+    const clearLogs = vi.fn(async () => undefined);
+    const errorLog = {
+      id: 1,
+      at: new Date().toISOString(),
+      level: "error",
+      event: "ui:test",
+      message: "boom",
+    };
+    const backend = {
+      ...demoBackend,
+      settings: async () => ({ ...(await demoBackend.settings()), onboarded: true }),
+      syncStatus: async () => ({ ...(await demoBackend.syncStatus()), logs: [errorLog] }),
+      errorLogs: async () => [errorLog],
+      clearLogs,
+    };
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<SettingsPage backend={backend} onSettingsChanged={() => {}} onError={() => {}} />);
+
+    const button = await screen.findByRole("button", { name: "清空日志" });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    await waitFor(() => expect(clearLogs).toHaveBeenCalledTimes(1));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("清空本地日志"));
+    expect(await screen.findByText("日志已清空")).toBeInTheDocument();
+    confirm.mockRestore();
+  });
+
+  it("shows only the five most recent sync events", async () => {
+    const logs = Array.from({ length: 8 }, (_, index) => ({
+      id: index + 1,
+      at: new Date(Date.now() - index * 1000).toISOString(),
+      level: "info",
+      event: `event-${index + 1}`,
+      message: `message-${index + 1}`,
+    }));
+    const backend = {
+      ...demoBackend,
+      settings: async () => ({ ...(await demoBackend.settings()), onboarded: true }),
+      syncStatus: async () => ({ ...(await demoBackend.syncStatus()), logs }),
+    };
+
+    const { container } = render(<SettingsPage backend={backend} onSettingsChanged={() => {}} onError={() => {}} />);
+
+    await screen.findByText("event-5");
+    expect(container.querySelectorAll(".sync-log")).toHaveLength(5);
+    expect(screen.queryByText("event-6")).not.toBeInTheDocument();
+  });
+});
+
 describe("SettingsPage updates", () => {
   it("checks on mount and installs an available update", async () => {
     const checkForUpdates = vi.fn(async () => updateInfo());

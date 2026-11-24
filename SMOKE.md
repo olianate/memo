@@ -12,6 +12,8 @@ Run before calling a build releasable. Use a disposable profile:
 - [ ] Settings → 编辑保存键 → Shift+Enter 保存: Enter adds a paragraph and
       Shift+Enter saves, in both the composer and the memo edit sheet; the
       choice survives a restart.
+- [ ] Settings → 错误日志 → 清空日志: confirm once; recent sync events and the
+      error list become empty, and later events still appear.
 - [ ] Restart the app: the memo and its tags are still there.
 - [ ] `Ctrl+Shift+Space` shows the sticky window; Esc hides it; the draft is
       preserved while the window is hidden.

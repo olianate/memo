@@ -585,6 +585,10 @@ export const demoBackend: Backend = {
   async exportLogs() {
     return "C:\\Users\\you\\AppData\\Roaming\\memo\\backups\\logs\\sync.log";
   },
+  async clearLogs() {
+    demo.errors = [];
+    demo.status.logs = [];
+  },
   async reportError(report: ErrorReport) {
     const detail = [report.message, report.stack ? `stack:\n${report.stack}` : "", report.context ? `context: ${report.context}` : ""]
       .filter(Boolean)

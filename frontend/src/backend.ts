@@ -63,6 +63,7 @@ export interface Backend {
   deleteLocalData(): Promise<void>;
   exportBackup(): Promise<BackupResult>;
   exportLogs(): Promise<string>;
+  clearLogs(): Promise<void>;
   reportError(report: ErrorReport): Promise<void>;
   errorLogs(): Promise<SyncLog[]>;
   openDataDir(): Promise<void>;

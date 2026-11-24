@@ -337,6 +337,12 @@ func (s *Store) Errors(ctx context.Context, limit int) ([]SyncLog, error) {
 	return s.queryLogs(ctx, `SELECT id, at, level, event, message FROM sync_log WHERE level = 'error' ORDER BY id DESC LIMIT ?`, limit)
 }
 
+// ClearLogs deletes every local sync and error log entry.
+func (s *Store) ClearLogs(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM sync_log`)
+	return err
+}
+
 func (s *Store) queryLogs(ctx context.Context, query string, limit int) ([]SyncLog, error) {
 	rows, err := s.db.QueryContext(ctx, query, limit)
 	if err != nil {
