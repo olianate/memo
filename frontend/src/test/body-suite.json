@@ -1,0 +1,62 @@
+{
+  "description": "Derived body projection conformance suite. internal/store (Go) and frontend/src/lib/bodyProjection.ts must agree on text, snippet, words, characters, composition and todos. Preview-only table rows are intentionally absent.",
+  "cases": [
+    {
+      "name": "mixed blocks",
+      "body": "# 标题\n\n正文 **粗体**\n\n- 项目\n- [x] 完成\n\n> 引用\n\n```go\nfmt.Println(1)\n```",
+      "bodyText": "标题\n正文 粗体\n项目\n完成\n引用\nfmt.Println(1)",
+      "snippet": "标题 正文 粗体 项目 完成 引用 fmt.Println(1)",
+      "words": 15,
+      "characters": 27,
+      "composition": {
+        "paragraph": 1,
+        "heading": 1,
+        "list": 1,
+        "todo": 1,
+        "quote": 1,
+        "code": 1,
+        "attachment": 0
+      },
+      "todoTotal": 1,
+      "todoDone": 1
+    },
+    {
+      "name": "attachments are omitted from text but counted",
+      "body": "前文\n\n![图](attachment://a1)\n\n[文件](attachment://a2)\n\n后文",
+      "bodyText": "前文\n后文",
+      "snippet": "前文 后文",
+      "words": 4,
+      "characters": 4,
+      "composition": {
+        "paragraph": 2,
+        "heading": 0,
+        "list": 0,
+        "todo": 0,
+        "quote": 0,
+        "code": 0,
+        "attachment": 2
+      },
+      "todoTotal": 0,
+      "todoDone": 0
+    },
+    {
+      "name": "dividers and empty lines leave no text",
+      "body": "---\n\n\n",
+      "bodyText": "",
+      "snippet": "",
+      "words": 0,
+      "characters": 0,
+      "composition": {
+        "paragraph": 0,
+        "heading": 0,
+        "list": 0,
+        "todo": 0,
+        "quote": 0,
+        "code": 0,
+        "attachment": 0
+      },
+      "todoTotal": 0,
+      "todoDone": 0
+    }
+  ]
+}
