@@ -3,7 +3,6 @@ import type {
   ArchiveTarget,
   Attachment,
   BackupResult,
-  Block,
   ConnectRequest,
   ConnectResult,
   Dashboard,
@@ -32,7 +31,7 @@ import * as UpdateSvc from "../bindings/github.com/olianate/memo/internal/servic
 
 const asMemo = (m: any): Memo => ({
   ...m,
-  blocks: m.blocks ?? [],
+  body: m.body ?? "",
   tags: m.tags ?? [],
   attachments: m.attachments ?? [],
 });
@@ -65,11 +64,11 @@ export const wailsBackend: Backend = {
   async counts() {
     return await MemoSvc.Counts();
   },
-  async create(blocks, tags) {
-    return asMemo(await MemoSvc.Create(blocks as any, tags));
+  async create(body, tags) {
+    return asMemo(await MemoSvc.Create(body, tags));
   },
-  async update(id, blocks, tags, keepLocal) {
-    return asMemo(await MemoSvc.Update(id, blocks as any, tags, keepLocal));
+  async update(id, body, tags, keepLocal) {
+    return asMemo(await MemoSvc.Update(id, body, tags, keepLocal));
   },
   async remove(id) {
     await MemoSvc.Delete(id);
@@ -88,12 +87,6 @@ export const wailsBackend: Backend = {
   },
   async hydrate(id) {
     return asMemo(await MemoSvc.Hydrate(id));
-  },
-  async parseMarkdown(source): Promise<Block[]> {
-    return ((await MemoSvc.ParseMarkdown(source)) ?? []) as unknown as Block[];
-  },
-  async serializeMarkdown(blocks) {
-    return await MemoSvc.SerializeMarkdown(blocks as any);
   },
   async addAttachmentBase64(memoId, name, mime, data): Promise<Attachment> {
     return (await MemoSvc.AddAttachmentBase64(memoId, name, mime, data)) as unknown as Attachment;
@@ -157,6 +150,9 @@ export const wailsBackend: Backend = {
   },
   async setHotkey(accelerator) {
     await SettingsSvc.SetHotkey(accelerator);
+  },
+  async setSubmitOnEnter(enabled) {
+    await SettingsSvc.SetSubmitOnEnter(enabled);
   },
   async setStartAtLogin(enabled) {
     await SettingsSvc.SetStartAtLogin(enabled);

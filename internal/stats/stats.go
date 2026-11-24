@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"unicode"
 
 	"github.com/olianate/memo/internal/domain"
 	"github.com/olianate/memo/internal/store"
@@ -126,10 +125,9 @@ func (s *Service) Dashboard(ctx context.Context, month string, now time.Time) (*
 		id         string
 		createdAt  time.Time
 		blockStats string
-		bodyText   string
 	}
 	var memos []memoRow
-	rows, err := s.store.DB().QueryContext(ctx, `SELECT id, created_at, block_stats, body_text FROM memos
+	rows, err := s.store.DB().QueryContext(ctx, `SELECT id, created_at, block_stats FROM memos
 		WHERE deleted_at IS NULL AND created_at>=? AND created_at<? ORDER BY created_at`, start.UnixMilli(), end.UnixMilli())
 	if err != nil {
 		return nil, err
@@ -137,7 +135,7 @@ func (s *Service) Dashboard(ctx context.Context, month string, now time.Time) (*
 	for rows.Next() {
 		var m memoRow
 		var created int64
-		if err := rows.Scan(&m.id, &created, &m.blockStats, &m.bodyText); err != nil {
+		if err := rows.Scan(&m.id, &created, &m.blockStats); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -165,24 +163,22 @@ func (s *Service) Dashboard(ctx context.Context, month string, now time.Time) (*
 		activeDays[date] = true
 		hours[m.createdAt.Hour()]++
 
-		words := CountWords(m.bodyText)
-		wordTotal += words
+		bs := domain.UnmarshalBlockStats(m.blockStats)
+		wordTotal += bs.Words
 		switch {
-		case words <= 50:
+		case bs.Words <= 50:
 			buckets[0]++
-		case words <= 100:
+		case bs.Words <= 100:
 			buckets[1]++
-		case words <= 200:
+		case bs.Words <= 200:
 			buckets[2]++
-		case words <= 400:
+		case bs.Words <= 400:
 			buckets[3]++
-		case words <= 800:
+		case bs.Words <= 800:
 			buckets[4]++
 		default:
 			buckets[5]++
 		}
-
-		bs := domain.UnmarshalBlockStats(m.blockStats)
 		composition["paragraph"] += bs.Paragraph
 		composition["heading"] += bs.Heading
 		composition["list"] += bs.List
@@ -341,26 +337,5 @@ func (s *Service) coOccurrence(ctx context.Context, start, end time.Time) ([]CoO
 
 // CountWords counts CJK characters individually and Latin-script runs as words.
 func CountWords(text string) int {
-	count := 0
-	inWord := false
-	for _, r := range text {
-		switch {
-		case isCJK(r):
-			count++
-			inWord = false
-		case unicode.IsLetter(r) || unicode.IsDigit(r):
-			if !inWord {
-				count++
-				inWord = true
-			}
-		default:
-			inWord = false
-		}
-	}
-	return count
-}
-
-func isCJK(r rune) bool {
-	return unicode.Is(unicode.Han, r) || unicode.Is(unicode.Hiragana, r) ||
-		unicode.Is(unicode.Katakana, r) || unicode.Is(unicode.Hangul, r)
+	return domain.CountWords(text)
 }

@@ -14,7 +14,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 2
+const schemaVersion = 3
 
 // Store wraps the SQLite database. All methods are safe for concurrent use.
 type Store struct {
@@ -65,11 +65,44 @@ func (s *Store) migrate() error {
 		if _, err := s.db.Exec(schemaV1); err != nil {
 			return fmt.Errorf("store: migrate v1: %w", err)
 		}
-		version = 1
+		if _, err := s.db.Exec(schemaV2); err != nil {
+			return fmt.Errorf("store: migrate v2: %w", err)
+		}
+		if _, err := s.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion)); err != nil {
+			return fmt.Errorf("store: set schema version: %w", err)
+		}
+		return nil
 	}
 	if version < 2 {
 		if _, err := s.db.Exec(schemaV2); err != nil {
 			return fmt.Errorf("store: migrate v2: %w", err)
+		}
+	}
+	if version < 3 {
+		hasBody, err := s.hasColumn("memos", "body_md")
+		if err != nil {
+			return err
+		}
+		if !hasBody {
+			legacy, err := s.hasColumn("memos", "body_json")
+			if err != nil {
+				return err
+			}
+			if legacy {
+				var stale int
+				if err := s.db.QueryRow(`SELECT COUNT(*) FROM memos
+					WHERE body_json IS NOT NULL AND TRIM(body_json) NOT IN ('', '[]')`).Scan(&stale); err != nil {
+					return fmt.Errorf("store: inspect legacy body: %w", err)
+				}
+				if stale > 0 {
+					return fmt.Errorf("store: this profile stores memos as block JSON from an older version; " +
+						"this release cannot read it and will not silently discard the bodies. " +
+						"Reset local data or restore a backup made by this version")
+				}
+			}
+			if _, err := s.db.Exec(`ALTER TABLE memos ADD COLUMN body_md TEXT NOT NULL DEFAULT ''`); err != nil {
+				return fmt.Errorf("store: migrate v3: %w", err)
+			}
 		}
 	}
 	if _, err := s.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion)); err != nil {
@@ -78,13 +111,34 @@ func (s *Store) migrate() error {
 	return nil
 }
 
+func (s *Store) hasColumn(table, column string) (bool, error) {
+	rows, err := s.db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return false, fmt.Errorf("store: inspect %s: %w", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, kind string
+		var notNull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &name, &kind, &notNull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
 const schemaV1 = `
 CREATE TABLE IF NOT EXISTS memos (
   id TEXT PRIMARY KEY,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   revision INTEGER NOT NULL DEFAULT 1,
-  body_json TEXT NOT NULL DEFAULT '[]',
+  body_md TEXT NOT NULL DEFAULT '',
   body_text TEXT NOT NULL DEFAULT '',
   snippet TEXT NOT NULL DEFAULT '',
   deleted_at INTEGER,
@@ -182,7 +236,7 @@ CREATE TABLE IF NOT EXISTS purged_pages (
 );
 `
 
-const memoColumns = `id, created_at, updated_at, revision, body_json, body_text, snippet,
+const memoColumns = `id, created_at, updated_at, revision, body_md, body_text, snippet,
   deleted_at, keep_local, local_state, notion_page_id, notion_synced_at,
   last_hydrated_at, base_revision, content_hash, sync_error, block_stats`
 

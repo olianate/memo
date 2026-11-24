@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Attachment, Block, SyncStatus } from "./types";
+import type { Attachment, SyncStatus } from "./types";
 import type { Backend } from "./backend";
 import { isWailsRuntime, onAppEvent } from "./backend";
 import { wailsBackend } from "./wailsBackend";
@@ -9,13 +9,9 @@ import { fileToBase64 } from "./lib/files";
 import { installGlobalErrorHandlers, reportError, setErrorSink } from "./lib/errorLog";
 import { CloseIcon, PaperclipIcon, SendIcon } from "./components/Icons";
 
-function newParagraph(): Block {
-  return { id: `sticky-${Math.random().toString(36).slice(2, 10)}`, type: "paragraph", spans: [] };
-}
-
 export default function StickyApp({ backend }: { backend?: Backend }) {
   const b = backend ?? (isWailsRuntime() ? wailsBackend : demoBackend);
-  const [blocks, setBlocks] = useState<Block[]>([newParagraph()]);
+  const [body, setBody] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [knownTags, setKnownTags] = useState<{ id: string; name: string; count: number }[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -24,7 +20,10 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [syncLabel, setSyncLabel] = useState("本地优先");
+  const [submitOnEnter, setSubmitOnEnter] = useState(true);
   const uploading = useRef(false);
+  const saveKey = submitOnEnter ? "Enter" : "Shift+Enter";
+  const newlineKey = submitOnEnter ? "Shift+Enter" : "Enter";
 
   useEffect(() => {
     setErrorSink((report) => b.reportError(report));
@@ -37,6 +36,13 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
 
   useEffect(() => {
     void b.tags().then((rows) => setKnownTags(rows.map((t) => ({ id: t.id, name: t.name, count: t.count }))));
+  }, [b]);
+
+  useEffect(() => {
+    void b
+      .settings()
+      .then((settings) => setSubmitOnEnter(settings.submit_on_enter))
+      .catch(() => {});
   }, [b]);
 
   useEffect(() => {
@@ -58,7 +64,7 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
   }, [b]);
 
   const reset = () => {
-    setBlocks([newParagraph()]);
+    setBody("");
     setTags([]);
     setAttachments([]);
     setDraftId(null);
@@ -66,13 +72,12 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
 
   const save = async () => {
     if (saving || uploading.current) return;
-    const text = blocks.map((block) => (block.spans ?? []).map((s) => s.text).join("")).join("").trim();
-    if (!text && attachments.length === 0 && !draftId) return;
+    if (!body.trim() && attachments.length === 0 && !draftId) return;
     setSaving(true);
     setError("");
     try {
-      if (draftId) await b.update(draftId, blocks, tags, false);
-      else await b.create(blocks, tags);
+      if (draftId) await b.update(draftId, body, tags, false);
+      else await b.create(body, tags);
       reset();
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2000);
@@ -106,7 +111,7 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
     try {
       let id = draftId;
       if (!id) {
-        const memo = await b.create(blocks, tags);
+        const memo = await b.create(body, tags);
         id = memo.id;
         setDraftId(id);
       }
@@ -115,7 +120,7 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
         await b.addAttachmentBase64(id, payload.name, payload.mime, payload.data);
       }
       const memo = await b.get(id);
-      setBlocks(memo.blocks ?? [newParagraph()]);
+      setBody(memo.body ?? "");
       setTags((memo.tags ?? []).map((t) => t.name));
       setAttachments(memo.attachments ?? []);
     } catch (e) {
@@ -131,7 +136,7 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
     try {
       await b.removeAttachment(id);
       const memo = await b.get(draftId);
-      setBlocks(memo.blocks ?? [newParagraph()]);
+      setBody(memo.body ?? "");
       setAttachments(memo.attachments ?? []);
     } catch (e) {
       reportError(e, { action: "remove_attachment", draft_id: draftId, attachment_id: id }, "sticky");
@@ -167,14 +172,14 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
       <div className="sticky-editor">
         <MarkdownEditor
           backend={b}
-          blocks={blocks}
+          body={body}
           tags={tags}
           attachments={attachments}
-          onChange={setBlocks}
+          onBodyChange={setBody}
           onTagsChange={setTags}
           onSubmit={() => void save()}
           onEscape={hide}
-          submitOnEnter
+          submitOnEnter={submitOnEnter}
           autoFocus
           compact
           placeholder="记下此刻的想法…"
@@ -194,14 +199,14 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
 
       <footer className="sticky-footer">
         <span>
-          {error ? <span className="inline-error">{error}</span> : `Enter 保存 · Shift+Enter 换行 · Esc 隐藏 · ${syncLabel}`}
+          {error ? <span className="inline-error">{error}</span> : `${saveKey} 保存 · ${newlineKey} 换行 · Esc 隐藏 · ${syncLabel}`}
         </span>
         <button type="button" className="send-button small" onClick={() => void save()} disabled={saving} aria-label="保存">
           {saving ? <span className="spinner" /> : <SendIcon size={15} />}
         </button>
       </footer>
 
-      {draftId && <div className="sticky-draft-hint">草稿已存在本地，继续输入后 Enter 更新</div>}
+      {draftId && <div className="sticky-draft-hint">草稿已存在本地，继续输入后 {saveKey} 更新</div>}
       <span className="sr-only">{knownTags.length} 个已有标签</span>
     </div>
   );

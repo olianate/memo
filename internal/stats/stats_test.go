@@ -46,25 +46,20 @@ func TestDashboardAggregates(t *testing.T) {
 
 	first, err := st.CreateMemo(ctx, store.MemoInput{
 		CreatedAt: nov(3, 9),
-		Blocks: []domain.Block{
-			{ID: domain.NewID(), Type: domain.BlockHeading, Level: 1, Spans: []domain.Span{{Text: "标题"}}},
-			{ID: domain.NewID(), Type: domain.BlockParagraph, Spans: []domain.Span{{Text: "hello 世界"}}},
-			{ID: domain.NewID(), Type: domain.BlockTodo, Checked: true, Spans: []domain.Span{{Text: "done task"}}},
-			{ID: domain.NewID(), Type: domain.BlockTodo, Spans: []domain.Span{{Text: "open task"}}},
-		},
-		Tags: []string{"work"},
+		Body:      "# 标题\n\nhello 世界\n\n- [x] done task\n\n- [ ] open task",
+		Tags:      []string{"work"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	second, _ := st.CreateMemo(ctx, store.MemoInput{
 		CreatedAt: nov(4, 22),
-		Blocks:    []domain.Block{{ID: domain.NewID(), Type: domain.BlockQuote, Spans: []domain.Span{{Text: "quoted"}}}},
+		Body:      "> quoted",
 		Tags:      []string{"work", "life"},
 	})
 	_, _ = st.CreateMemo(ctx, store.MemoInput{
 		CreatedAt: nov(3, 10),
-		Blocks:    []domain.Block{{ID: domain.NewID(), Type: domain.BlockParagraph, Spans: []domain.Span{{Text: "third"}}}},
+		Body:      "third",
 		Tags:      []string{"life"},
 	})
 	_, err = st.CreateAttachment(ctx, domain.Attachment{

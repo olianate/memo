@@ -13,7 +13,7 @@ and packaging.
 ```
 main.go                       Wails application, windows, tray, hotkey
 internal/
-  domain/                     memo, block AST, tags, Markdown parser/serializer
+  domain/                     memo, Markdown body model, tags, parser/serializer
   store/                      SQLite schema, transactions, outbox, settings
   search/                     FTS5 trigram + LIKE fallback
   stats/                      metadata-driven dashboard queries
@@ -82,6 +82,27 @@ wails3 task common:generate:bindings
 
 The task runs `wails3 generate bindings -clean`, which deletes and rewrites the
 whole tree. Never hand-edit those files.
+
+## Body flow
+
+The editor owns a single Markdown string. The frontend never sends a block
+tree: `create` and `update` pass `body: string`, and the store writes it to
+`body_md` byte for byte. On every write it derives `body_text`, `snippet`,
+`block_stats`, `content_hash` and the FTS row by parsing the supported Markdown
+subset; the body itself is never normalized or re-serialized.
+
+Live preview uses Atomic Editor (`@atomic-editor/editor`), a CodeMirror 6
+inline-preview surface. It receives the body as `markdownSource` and emits the
+exact Markdown on every edit. Replacing the body from outside the editor (memo
+switch, attachment upload) remounts it, so the editor's document never drifts
+from `body_md`. There is no separate whole-document source mode; clicking a
+rendered line exposes its Markdown source in place.
+
+Push parses `body_md` into Notion blocks only at the sync boundary. Pull maps
+Notion blocks back to Markdown, including a ` ```notion ` fence for blocks with
+no Markdown form, and writes the result to `body_md`. Attachments stay
+`attachment://id` references in the body; bytes move only when Notion uploads or
+downloads them.
 
 ## Notion setup
 
@@ -252,6 +273,9 @@ also be triggered manually to exercise the build jobs without publishing.
 - The FTS index retains tokenized text after body eviction. This is deliberate
   so search still works.
 - Notion cannot permanently delete pages or revoke uploaded file objects.
-- Notion-side body edits are not pulled; the app is the writer.
-- Markdown tables, HTML, math, footnotes and embeds stay literal text.
+- Notion round-trips are lossy outside the supported Markdown subset: tables,
+  HTML, math, footnotes, embeds and nested-list nesting stay literal locally and
+  are flattened or preserved as a `notion` fence when pushed.
+- A profile created by the block-AST version is rejected at startup with a
+  message to reset local data; there is no in-place migration.
 - macOS IME is untested by decision.

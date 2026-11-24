@@ -2,11 +2,14 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/domain/markdown"
 )
 
 func testStore(t *testing.T) *Store {
@@ -31,7 +34,7 @@ func TestCreateMemoPersistsAndIndexes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	memo, err := s.CreateMemo(ctx, MemoInput{Blocks: blocks("hello 世界"), Tags: []string{"Work", "ideas"}})
+	memo, err := s.CreateMemo(ctx, MemoInput{Body: "hello 世界", Tags: []string{"Work", "ideas"}})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -74,11 +77,11 @@ func TestCreateMemoPersistsAndIndexes(t *testing.T) {
 func TestUpdateMemoBumpsRevisionAndReindexes(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
-	memo, err := s.CreateMemo(ctx, MemoInput{Blocks: blocks("old text"), Tags: []string{"a"}})
+	memo, err := s.CreateMemo(ctx, MemoInput{Body: "old text", Tags: []string{"a"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated, err := s.UpdateMemo(ctx, memo.ID, blocks("new 中文 text"), []string{"b"}, nil)
+	updated, err := s.UpdateMemo(ctx, memo.ID, "new 中文 text", []string{"b"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,10 +100,55 @@ func TestUpdateMemoBumpsRevisionAndReindexes(t *testing.T) {
 	}
 }
 
+func TestMarkdownBodyIsVerbatimAndDerived(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	body := "# 标题\n\n- [x] 完成\n- [ ] 未完成  \n- 项目\n\n```go\nfmt.Println(\"hi\")  \n```\n\n| a | b |\n| - | - |\n\n<div>raw</div>\n\n尾随空格  \n"
+	tags := []string{"Work", "work", "ideas"}
+	memo, err := s.CreateMemo(ctx, MemoInput{Body: body, Tags: tags})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if memo.Body != body {
+		t.Fatalf("body changed on create:\n got %q\nwant %q", memo.Body, body)
+	}
+	if memo.ContentHash != domain.HashContent(body, tags) {
+		t.Fatalf("hash = %q", memo.ContentHash)
+	}
+	if got := memo.BlockStats; got.Heading != 1 || got.Todo != 2 || got.TodoDone != 1 || got.List != 1 || got.Code != 1 || got.Paragraph != 4 {
+		t.Fatalf("stats = %+v", got)
+	} else if got.Words != 21 || got.Characters != 64 {
+		t.Fatalf("word/character stats = %+v", got)
+	}
+	if memo.Snippet != domain.Snippet(memo.BodyText, 200) {
+		t.Fatalf("snippet = %q, text = %q", memo.Snippet, memo.BodyText)
+	}
+	if memo.BodyText != domain.Text(markdown.Parse(body)) {
+		t.Fatalf("derived text = %q", memo.BodyText)
+	}
+
+	next := "  leading space\n\n\n<div>still literal</div>  "
+	updated, err := s.UpdateMemo(ctx, memo.ID, next, []string{"ideas"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Body != next || updated.ContentHash != domain.HashContent(next, []string{"ideas"}) {
+		t.Fatalf("update body/hash = %q / %q", updated.Body, updated.ContentHash)
+	}
+
+	again, err := s.GetMemo(ctx, memo.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Body != next {
+		t.Fatalf("reopened body = %q, want %q", again.Body, next)
+	}
+}
+
 func TestSoftDeleteRestoreAndViews(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
-	memo, _ := s.CreateMemo(ctx, MemoInput{Blocks: blocks("tombstone me")})
+	memo, _ := s.CreateMemo(ctx, MemoInput{Body: "tombstone me"})
 	if err := s.SoftDelete(ctx, memo.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +200,7 @@ func TestPurgedPageMarkers(t *testing.T) {
 func TestDeleteMemoRemovesOutboxAndSearch(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
-	memo, _ := s.CreateMemo(ctx, MemoInput{Blocks: blocks("delete me permanently")})
+	memo, _ := s.CreateMemo(ctx, MemoInput{Body: "delete me permanently"})
 	if err := s.DeleteMemo(ctx, memo.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +222,7 @@ func TestDeleteMemoRemovesOutboxAndSearch(t *testing.T) {
 func TestRenameAndMergeTagsDoNotTouchBodies(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
-	memo, _ := s.CreateMemo(ctx, MemoInput{Blocks: blocks("body stays"), Tags: []string{"work", "job"}})
+	memo, _ := s.CreateMemo(ctx, MemoInput{Body: "body stays", Tags: []string{"work", "job"}})
 	before, _ := s.GetMemo(ctx, memo.ID)
 
 	tags, _ := s.ListTags(ctx)
@@ -209,7 +257,7 @@ func TestRenameAndMergeTagsDoNotTouchBodies(t *testing.T) {
 func TestTagRenameReindexesAndQueuesPropertyPush(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
-	memo, _ := s.CreateMemo(ctx, MemoInput{Blocks: blocks("body stays"), Tags: []string{"work"}})
+	memo, _ := s.CreateMemo(ctx, MemoInput{Body: "body stays", Tags: []string{"work"}})
 	if err := s.ClearOutbox(ctx, memo.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -240,13 +288,13 @@ func TestTagRenameReindexesAndQueuesPropertyPush(t *testing.T) {
 func TestConditionalPushBookkeeping(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
-	memo, _ := s.CreateMemo(ctx, MemoInput{Blocks: blocks("one")})
+	memo, _ := s.CreateMemo(ctx, MemoInput{Body: "one"})
 	item, _ := s.OutboxForMemo(ctx, memo.ID)
 	if item == nil {
 		t.Fatal("outbox missing")
 	}
 	time.Sleep(3 * time.Millisecond)
-	if _, err := s.UpdateMemo(ctx, memo.ID, blocks("two"), nil, nil); err != nil {
+	if _, err := s.UpdateMemo(ctx, memo.ID, "two", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	// The push of revision 1 must not clear the revision-2 row.
@@ -278,8 +326,8 @@ func TestConditionalPushBookkeeping(t *testing.T) {
 func TestOutboxCoalescesAndBacksOff(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
-	memo, _ := s.CreateMemo(ctx, MemoInput{Blocks: blocks("one")})
-	if _, err := s.UpdateMemo(ctx, memo.ID, blocks("two"), nil, nil); err != nil {
+	memo, _ := s.CreateMemo(ctx, MemoInput{Body: "one"})
+	if _, err := s.UpdateMemo(ctx, memo.ID, "two", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	items, err := s.DueOutbox(ctx, time.Now().Add(time.Second), 10)
@@ -296,12 +344,61 @@ func TestOutboxCoalescesAndBacksOff(t *testing.T) {
 	if len(items) != 0 {
 		t.Fatalf("failed item should not be due: %+v", items)
 	}
-	if _, err := s.UpdateMemo(ctx, memo.ID, blocks("three"), nil, nil); err != nil {
+	if _, err := s.UpdateMemo(ctx, memo.ID, "three", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	items, _ = s.DueOutbox(ctx, time.Now(), 10)
 	if len(items) != 1 || items[0].Attempts != 0 || items[0].Revision != 3 {
 		t.Fatalf("coalesced = %+v", items)
+	}
+}
+
+func TestLegacyBlockProfileIsRejected(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE memos (id TEXT PRIMARY KEY, body_json TEXT NOT NULL DEFAULT '[]')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO memos(id, body_json) VALUES('m1', '[{"type":"paragraph"}]')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`PRAGMA user_version = 2`); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+
+	_, err = Open(path)
+	if err == nil || !strings.Contains(err.Error(), "block JSON") {
+		t.Fatalf("legacy profile error = %v, want a clear block-JSON rejection", err)
+	}
+}
+
+func TestBackupRoundTripsMarkdownBody(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	body := "# 标题\n\n\n尾随空格  \n\n| a | b |\n| - | - |\n"
+	memo, err := s.CreateMemo(ctx, MemoInput{Body: body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(t.TempDir(), "backup.db")
+	if _, err := s.DB().ExecContext(ctx, `VACUUM INTO ?`, filepath.ToSlash(backup)); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := Open(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = restored.Close() })
+	got, err := restored.GetMemo(ctx, memo.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Body != body {
+		t.Fatalf("restored body = %q, want %q", got.Body, body)
 	}
 }
 
@@ -315,7 +412,7 @@ func TestApplyRemoteDoesNotEnqueue(t *testing.T) {
 		CreatedAt: now.Add(-time.Hour),
 		UpdatedAt: now,
 		Revision:  4,
-		Blocks:    blocks("from notion"),
+		Body:      "from notion",
 		Tags:      []string{"remote"},
 		SyncedAt:  now,
 	}
@@ -339,12 +436,12 @@ func TestApplyRemoteDoesNotEnqueue(t *testing.T) {
 func TestEvictionKeepsMetadataAndSearchText(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
-	memo, _ := s.CreateMemo(ctx, MemoInput{Blocks: blocks("search still works")})
+	memo, _ := s.CreateMemo(ctx, MemoInput{Body: "search still works"})
 	if err := s.SetEvicted(ctx, memo.ID); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := s.GetMemo(ctx, memo.ID)
-	if got.LocalState != domain.LocalEvicted || got.BodyJSON != "[]" {
+	if got.LocalState != domain.LocalEvicted || got.Body != "" {
 		t.Fatalf("evicted memo = %+v", got)
 	}
 	if got.BodyText != "search still works" {
@@ -386,8 +483,8 @@ func TestSettingsAndDeviceState(t *testing.T) {
 func TestCounts(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
-	_, _ = s.CreateMemo(ctx, MemoInput{Blocks: blocks("one"), Tags: []string{"a"}})
-	_, _ = s.CreateMemo(ctx, MemoInput{Blocks: blocks("two"), Tags: []string{"a", "b"}})
+	_, _ = s.CreateMemo(ctx, MemoInput{Body: "one", Tags: []string{"a"}})
+	_, _ = s.CreateMemo(ctx, MemoInput{Body: "two", Tags: []string{"a", "b"}})
 	notes, tags, days, err := s.Counts(ctx)
 	if err != nil {
 		t.Fatal(err)

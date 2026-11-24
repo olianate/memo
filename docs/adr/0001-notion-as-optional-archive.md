@@ -10,4 +10,4 @@ The app is local-first and must support a sticky capture window, offline capture
 - Search is always local; Notion's title-only search is never the search path.
 - The app must own a resumable backfill, a trash sweep, and an image cache.
 - A privacy-focused user must understand that the FTS index retains text and that Notion cannot revoke uploaded files.
-- Notion-side body edits are not pulled in v1; the app is the writer.
+- Notion-side body edits were not pulled in v1; ADR 0006 later added Markdown pull, so the app is no longer the only writer.

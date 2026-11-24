@@ -15,7 +15,7 @@
 
 - 打开即写，`Enter` 保存，`Shift+Enter` 换行
 - `Ctrl+Shift+Space` 全局快速记录，`Esc` 隐藏
-- Markdown 块、标签、附件、本地搜索
+- Markdown 实时预览、标签、附件、本地搜索
 - 回收站、托盘常驻、单实例
 - 可选 Notion 归档，支持 schema 检查、同步暂停和正文保留策略
 

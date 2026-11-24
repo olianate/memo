@@ -7,6 +7,7 @@ import (
 
 	"github.com/olianate/memo/internal/config"
 	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/domain/markdown"
 	"github.com/olianate/memo/internal/store"
 )
 
@@ -130,7 +131,7 @@ func (s *Service) Hydrate(ctx context.Context, memoID string) error {
 		return err
 	}
 	now := s.clock()
-	if err := s.store.HydrateMemo(ctx, memoID, blocks, now); err != nil {
+	if err := s.store.HydrateMemo(ctx, memoID, markdown.Serialize(blocks), now); err != nil {
 		return err
 	}
 	if err := s.store.SetPresent(ctx, memoID, now); err != nil {

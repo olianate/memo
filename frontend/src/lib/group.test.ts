@@ -11,7 +11,7 @@ const memo = (id: string, day: string): Memo => ({
   deleted: false,
   keep_local: false,
   local_state: "present",
-  blocks: [],
+  body: "",
   tags: [],
   attachments: [],
   day,

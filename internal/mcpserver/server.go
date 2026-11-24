@@ -19,7 +19,6 @@ import (
 
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/olianate/memo/internal/domain"
 	"github.com/olianate/memo/internal/domain/markdown"
 	"github.com/olianate/memo/internal/services"
 )
@@ -34,8 +33,8 @@ const (
 // MemoAPI is the subset of the memo service the MCP tools need.
 type MemoAPI interface {
 	Get(id string) (services.MemoDTO, error)
-	Create(blocks []domain.Block, tags []string) (services.MemoDTO, error)
-	Update(id string, blocks []domain.Block, tags []string, keepLocal bool) (services.MemoDTO, error)
+	Create(body string, tags []string) (services.MemoDTO, error)
+	Update(id string, body string, tags []string, keepLocal bool) (services.MemoDTO, error)
 	Delete(id string) error
 	AddAttachmentBase64(memoID, name, mime, data string) (services.AttachmentDTO, error)
 	RemoveAttachment(id string) error
@@ -307,11 +306,11 @@ func (s *Service) createMemo(_ context.Context, _ *mcp.CallToolRequest, in creat
 	if err != nil {
 		return nil, memoOutput{}, err
 	}
-	blocks := []domain.Block{}
-	if content != "" {
-		blocks = markdown.Parse(in.Content)
+	body := in.Content
+	if strings.TrimSpace(body) == "" {
+		body = ""
 	}
-	memo, err := s.memo.Create(blocks, in.Tags)
+	memo, err := s.memo.Create(body, in.Tags)
 	if err != nil {
 		return nil, memoOutput{}, err
 	}
@@ -362,22 +361,12 @@ func (s *Service) updateMemo(_ context.Context, _ *mcp.CallToolRequest, in updat
 			return nil, memoOutput{}, err
 		}
 	}
-	blocks := current.Blocks
+	body := current.Body
 	if hasContent {
-		blocks = markdown.Parse(in.Content)
+		body = in.Content
 		// A content-only edit must not silently drop existing images/files.
 		// Explicit removals happen above; everything else is preserved.
-		referenced := make(map[string]bool, len(blocks))
-		for _, block := range blocks {
-			if block.AttachmentID != "" {
-				referenced[block.AttachmentID] = true
-			}
-		}
-		for _, block := range current.Blocks {
-			if (block.Type == domain.BlockImage || block.Type == domain.BlockFile) && !referenced[block.AttachmentID] {
-				blocks = append(blocks, block)
-			}
-		}
+		body = preserveAttachments(current.Body, body)
 	}
 	if hasContent || in.Tags != nil {
 		tags := in.Tags
@@ -387,7 +376,7 @@ func (s *Service) updateMemo(_ context.Context, _ *mcp.CallToolRequest, in updat
 				tags = append(tags, t.Name)
 			}
 		}
-		current, err = s.memo.Update(id, blocks, tags, current.KeepLocal)
+		current, err = s.memo.Update(id, body, tags, current.KeepLocal)
 		if err != nil {
 			return nil, memoOutput{}, err
 		}
@@ -498,6 +487,25 @@ func (s *Service) deleteMemo(_ context.Context, _ *mcp.CallToolRequest, in delet
 	return nil, deleteMemoOutput{ID: id, Deleted: true}, nil
 }
 
+func preserveAttachments(currentBody, nextBody string) string {
+	referenced := map[string]bool{}
+	for _, block := range markdown.Parse(nextBody) {
+		if block.AttachmentID != "" {
+			referenced[block.AttachmentID] = true
+		}
+	}
+	for _, block := range markdown.Parse(currentBody) {
+		if block.Type != "image" && block.Type != "file" {
+			continue
+		}
+		if block.AttachmentID == "" || referenced[block.AttachmentID] {
+			continue
+		}
+		nextBody = markdown.AppendAttachment(nextBody, block.Type, block.AttachmentID, block.Alt)
+	}
+	return nextBody
+}
+
 func toRecord(m services.MemoDTO) MemoRecord {
 	tags := make([]string, 0, len(m.Tags))
 	for _, t := range m.Tags {
@@ -512,7 +520,7 @@ func toRecord(m services.MemoDTO) MemoRecord {
 	}
 	links := make([]string, 0)
 	seenLinks := make(map[string]bool)
-	for _, block := range m.Blocks {
+	for _, block := range markdown.Parse(m.Body) {
 		for _, span := range block.Spans {
 			link := strings.TrimSpace(span.Link)
 			if link == "" || seenLinks[link] {
@@ -526,7 +534,7 @@ func toRecord(m services.MemoDTO) MemoRecord {
 		ID:          m.ID,
 		CreatedAt:   m.CreatedAt,
 		UpdatedAt:   m.UpdatedAt,
-		Content:     markdown.Serialize(m.Blocks),
+		Content:     m.Body,
 		Tags:        tags,
 		Attachments: attachments,
 		Links:       links,

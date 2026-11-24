@@ -47,9 +47,7 @@ func pngImage(t *testing.T, w, h int) []byte {
 
 func createMemo(t *testing.T, st *store.Store) *domain.Memo {
 	t.Helper()
-	memo, err := st.CreateMemo(context.Background(), store.MemoInput{
-		Blocks: []domain.Block{{ID: domain.NewID(), Type: domain.BlockParagraph, Spans: []domain.Span{{Text: "memo"}}}},
-	})
+	memo, err := st.CreateMemo(context.Background(), store.MemoInput{Body: "memo"})
 	if err != nil {
 		t.Fatal(err)
 	}

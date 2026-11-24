@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/domain/markdown"
 )
 
 func spans(text string, marks ...string) []domain.Span {
@@ -123,8 +124,14 @@ func TestExternalFileObjectsAreNotImported(t *testing.T) {
 	if len(atts) != 0 {
 		t.Fatalf("external URL imported: %+v", atts)
 	}
-	if len(back) != 0 {
-		t.Fatalf("external image became a block: %+v", back)
+	if len(back) != 1 {
+		t.Fatalf("external image dropped: %+v", back)
+	}
+	if back[0].Type != domain.BlockCode || back[0].Language != notionFenceLanguage {
+		t.Fatalf("external image should stay visible as a notion fence: %+v", back[0])
+	}
+	if !strings.Contains(back[0].PlainText(), "127.0.0.1") {
+		t.Fatalf("fence lost the original payload: %q", back[0].PlainText())
 	}
 }
 
@@ -190,3 +197,184 @@ func TestPagePropertyHelpers(t *testing.T) {
 }
 
 func floatPtr(v float64) *float64 { return &v }
+func TestNotionFenceRestoresRawBlock(t *testing.T) {
+	raw := `{"object":"block","id":"abc","type":"callout","has_children":false,"callout":{"rich_text":[{"type":"text","text":{"content":"note"}}],"icon":{"type":"emoji","emoji":"💡"}}}`
+	blocks := []domain.Block{{
+		Type:     domain.BlockCode,
+		Language: "notion",
+		Spans:    []domain.Span{{Text: raw}},
+	}}
+	out, err := BlocksToNotion(blocks, nil)
+	if err != nil {
+		t.Fatalf("BlocksToNotion: %v", err)
+	}
+	if len(out) != 1 || out[0].Type != "callout" {
+		t.Fatalf("out = %+v, want one callout", out)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(out[0].Raw, &payload); err != nil {
+		t.Fatalf("raw payload: %v", err)
+	}
+	if _, ok := payload["id"]; ok {
+		t.Error("restored payload kept the read-only id")
+	}
+	if _, ok := payload["has_children"]; ok {
+		t.Error("restored payload kept has_children")
+	}
+	if payload["object"] != "block" || payload["type"] != "callout" {
+		t.Errorf("payload = %+v", payload)
+	}
+	if _, ok := payload["callout"]; !ok {
+		t.Error("restored payload lost the callout body")
+	}
+}
+
+func TestNotionFenceFallsBackToCodeBlock(t *testing.T) {
+	cases := []string{
+		"not json",
+		`{"type":"child_page","child_page":{"title":"x"}}`,
+		`{"type":"paragraph","paragraph":{"rich_text":[]},"children":[{"type":"paragraph"}]}`,
+	}
+	for _, raw := range cases {
+		blocks := []domain.Block{{
+			Type:     domain.BlockCode,
+			Language: "notion",
+			Spans:    []domain.Span{{Text: raw}},
+		}}
+		out, err := BlocksToNotion(blocks, nil)
+		if err != nil {
+			t.Fatalf("BlocksToNotion(%q): %v", raw, err)
+		}
+		if len(out) != 1 || out[0].Type != "code" {
+			t.Fatalf("out = %+v, want code fallback for %q", out, raw)
+		}
+		if out[0].Code == nil || out[0].Code.Language != "plain text" {
+			t.Errorf("fallback language = %+v, want plain text", out[0].Code)
+		}
+		if len(out[0].Code.RichText) != 1 || out[0].Code.RichText[0].Text == nil || out[0].Code.RichText[0].Text.Content != raw {
+			t.Errorf("fallback content lost for %q", raw)
+		}
+	}
+}
+func TestBlocksFromNotionKeepsUnsupportedBlocks(t *testing.T) {
+	const src = `[
+		{"object":"block","id":"c1","type":"callout","callout":{"rich_text":[{"type":"text","plain_text":"note","text":{"content":"note"}}],"icon":{"type":"emoji","emoji":"*"}}},
+		{"object":"block","id":"k1","type":"table_row","table_row":{"cells":[[{"type":"text","plain_text":"a"}],[{"type":"text","plain_text":"b"}]]}},
+		{"object":"block","id":"e1","type":"embed","embed":{"url":"https://example.com/embed"}},
+		{"object":"block","id":"p1","type":"child_page","child_page":{"title":"Child page"}},
+		{"object":"block","id":"l1","type":"column_list","column_list":{},"has_children":true}
+	]`
+	var blocks []Block
+	if err := json.Unmarshal([]byte(src), &blocks); err != nil {
+		t.Fatal(err)
+	}
+	if len(blocks[0].Raw) == 0 {
+		t.Fatal("raw payload was not captured on read")
+	}
+	out, atts := BlocksFromNotion(blocks)
+	if len(atts) != 0 {
+		t.Fatalf("unexpected attachments: %+v", atts)
+	}
+	if len(out) != len(blocks) {
+		t.Fatalf("blocks = %d, want %d (no block may be dropped): %+v", len(out), len(blocks), out)
+	}
+	if out[0].Type != domain.BlockParagraph || out[0].PlainText() != "note" {
+		t.Errorf("callout = %+v, want paragraph note", out[0])
+	}
+	if out[1].Type != domain.BlockParagraph || out[1].PlainText() != "a | b" {
+		t.Errorf("table row = %+v, want paragraph 'a | b'", out[1])
+	}
+	if out[2].Type != domain.BlockParagraph || out[2].PlainText() != "https://example.com/embed" {
+		t.Errorf("embed = %+v, want its URL as a paragraph", out[2])
+	}
+	if out[3].Type != domain.BlockParagraph || out[3].PlainText() != "Child page" {
+		t.Errorf("child page = %+v, want its title as a paragraph", out[3])
+	}
+	if out[4].Type != domain.BlockCode || out[4].Language != notionFenceLanguage {
+		t.Fatalf("column list = %+v, want a notion fence", out[4])
+	}
+	if !strings.Contains(out[4].PlainText(), `"column_list"`) {
+		t.Errorf("fence payload lost the original block: %q", out[4].PlainText())
+	}
+}
+
+func TestNotionBlocksSerializeToMarkdown(t *testing.T) {
+	blocks := []Block{
+		{Type: "paragraph", Paragraph: &TextBlock{RichText: []RichText{
+			{Type: "text", PlainText: "bold", Annotations: &Annotations{Bold: true}},
+			{Type: "text", PlainText: " and "},
+			{Type: "text", PlainText: "link", Href: "https://example.com"},
+		}}},
+		{Type: "heading_2", Heading2: &TextBlock{RichText: []RichText{{Type: "text", PlainText: "h2"}}}},
+		{Type: "bulleted_list_item", BulletedListItem: &TextBlock{RichText: []RichText{{Type: "text", PlainText: "bullet"}}}},
+		{Type: "to_do", ToDo: &TodoBlock{Checked: true, RichText: []RichText{{Type: "text", PlainText: "todo"}}}},
+		{Type: "quote", Quote: &TextBlock{RichText: []RichText{{Type: "text", PlainText: "quote"}}}},
+		{Type: "code", Code: &CodeBlock{Language: "go", RichText: []RichText{{Type: "text", PlainText: "fmt.Println()"}}}},
+		{Type: "divider"},
+	}
+	out, _ := BlocksFromNotion(blocks)
+	md := markdown.Serialize(out)
+	for _, want := range []string{
+		"**bold**", "[link](https://example.com)", "## h2", "- bullet",
+		"- [x] todo", "> quote", "```go", "fmt.Println()", "---",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("markdown %q is missing %q", md, want)
+		}
+	}
+}
+
+func TestBlocksFromNotionSupportedMatrix(t *testing.T) {
+	const src = `[
+		{"type":"paragraph","id":"1","paragraph":{"rich_text":[{"type":"text","plain_text":"para"}]}},
+		{"type":"heading_1","id":"2","heading_1":{"rich_text":[{"type":"text","plain_text":"h1"}]}},
+		{"type":"heading_2","id":"3","heading_2":{"rich_text":[{"type":"text","plain_text":"h2"}]}},
+		{"type":"heading_3","id":"4","heading_3":{"rich_text":[{"type":"text","plain_text":"h3"}]}},
+		{"type":"bulleted_list_item","id":"5","bulleted_list_item":{"rich_text":[{"type":"text","plain_text":"bullet"}]}},
+		{"type":"numbered_list_item","id":"6","numbered_list_item":{"rich_text":[{"type":"text","plain_text":"ordered"}]}},
+		{"type":"to_do","id":"7","to_do":{"checked":true,"rich_text":[{"type":"text","plain_text":"todo"}]}},
+		{"type":"quote","id":"8","quote":{"rich_text":[{"type":"text","plain_text":"quote"}]}},
+		{"type":"code","id":"9","code":{"language":"go","rich_text":[{"type":"text","plain_text":"fmt.Println()"}]}},
+		{"type":"divider","id":"10","divider":{}}
+	]`
+	var blocks []Block
+	if err := json.Unmarshal([]byte(src), &blocks); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := BlocksFromNotion(blocks)
+	if len(out) != len(blocks) {
+		t.Fatalf("blocks = %d, want %d", len(out), len(blocks))
+	}
+	want := []domain.BlockType{
+		domain.BlockParagraph, domain.BlockHeading, domain.BlockHeading, domain.BlockHeading,
+		domain.BlockBullet, domain.BlockOrdered, domain.BlockTodo, domain.BlockQuote,
+		domain.BlockCode, domain.BlockDivider,
+	}
+	for i, typ := range want {
+		if out[i].Type != typ {
+			t.Errorf("block %d type = %q, want %q", i, out[i].Type, typ)
+		}
+	}
+	if out[1].Level != 1 || out[2].Level != 2 || out[3].Level != 3 {
+		t.Errorf("heading levels = %d/%d/%d", out[1].Level, out[2].Level, out[3].Level)
+	}
+	if !out[6].Checked || out[8].Language != "go" {
+		t.Errorf("todo/code metadata lost: %+v", out)
+	}
+}
+
+func TestHeadingLevelsAboveThreeClampToNotionH3(t *testing.T) {
+	for level := 4; level <= 6; level++ {
+		out, err := BlocksToNotion([]domain.Block{{
+			Type:  domain.BlockHeading,
+			Level: level,
+			Spans: spans("deep"),
+		}}, nil)
+		if err != nil {
+			t.Fatalf("level %d: %v", level, err)
+		}
+		if len(out) != 1 || out[0].Type != "heading_3" || out[0].Heading3 == nil {
+			t.Errorf("level %d -> %+v, want heading_3", level, out)
+		}
+	}
+}

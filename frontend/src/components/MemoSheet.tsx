@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Attachment, Block, Memo } from "../types";
+import type { Attachment, Memo } from "../types";
 import type { Backend } from "../backend";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { formatDate } from "../lib/format";
@@ -13,14 +13,16 @@ export function MemoSheet({
   onClose,
   onChanged,
   onError,
+  submitOnEnter = true,
 }: {
   memo: Memo;
   backend: Backend;
   onClose: () => void;
   onChanged: (memo: Memo | null) => void;
   onError: (message: string) => void;
+  submitOnEnter?: boolean;
 }) {
-  const [blocks, setBlocks] = useState<Block[]>(memo.blocks ?? []);
+  const [body, setBody] = useState(memo.body ?? "");
   const [tags, setTags] = useState<string[]>((memo.tags ?? []).map((t) => t.name));
   const [attachments, setAttachments] = useState<Attachment[]>(memo.attachments ?? []);
   const [keepLocal, setKeepLocal] = useState(memo.keep_local);
@@ -34,7 +36,7 @@ export function MemoSheet({
   // The sheet is mounted before an evicted memo finishes hydrating; resync when
   // the parent replaces the placeholder with the hydrated memo.
   useEffect(() => {
-    setBlocks(memo.blocks ?? []);
+    setBody(memo.body ?? "");
     setTags((memo.tags ?? []).map((t) => t.name));
     setAttachments(memo.attachments ?? []);
     setKeepLocal(memo.keep_local);
@@ -52,7 +54,7 @@ export function MemoSheet({
 
   const refresh = async (id: string) => {
     const fresh = await backend.get(id);
-    setBlocks(fresh.blocks ?? []);
+    setBody(fresh.body ?? "");
     setTags((fresh.tags ?? []).map((t) => t.name));
     setAttachments(fresh.attachments ?? []);
     setDeleted(fresh.deleted);
@@ -74,10 +76,11 @@ export function MemoSheet({
   };
 
   const save = async () => {
+    if (saving || deleted) return;
     setSaving(true);
     setError("");
     try {
-      const updated = await backend.update(memo.id, blocks, tags, keepLocal);
+      const updated = await backend.update(memo.id, body, tags, keepLocal);
       onChanged(updated);
       onClose();
     } catch (e) {
@@ -207,11 +210,13 @@ export function MemoSheet({
             <div className="sheet-editor">
               <MarkdownEditor
                 backend={backend}
-                blocks={blocks}
+                body={body}
                 tags={tags}
                 attachments={attachments}
-                onChange={setBlocks}
+                onBodyChange={setBody}
                 onTagsChange={setTags}
+                onSubmit={() => void save()}
+                submitOnEnter={submitOnEnter}
                 autoFocus
                 onAddAttachment={(files) => void addFiles(files)}
                 onRemoveAttachment={(id) => void removeAttachment(id)}

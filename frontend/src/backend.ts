@@ -4,7 +4,6 @@ import type {
   ArchiveTarget,
   Attachment,
   BackupResult,
-  Block,
   ConnectRequest,
   ConnectResult,
   Counts,
@@ -29,16 +28,14 @@ export interface Backend {
   list(filter?: Filter): Promise<Memo[]>;
   get(id: string): Promise<Memo>;
   counts(): Promise<Counts>;
-  create(blocks: Block[], tags: string[]): Promise<Memo>;
-  update(id: string, blocks: Block[], tags: string[], keepLocal: boolean): Promise<Memo>;
+  create(body: string, tags: string[]): Promise<Memo>;
+  update(id: string, body: string, tags: string[], keepLocal: boolean): Promise<Memo>;
   remove(id: string): Promise<void>;
   restore(id: string): Promise<Memo>;
   purgeMemo(id: string): Promise<void>;
   emptyTrash(): Promise<number>;
   setKeepLocal(id: string, keep: boolean): Promise<void>;
   hydrate(id: string): Promise<Memo>;
-  parseMarkdown(source: string): Promise<Block[]>;
-  serializeMarkdown(blocks: Block[]): Promise<string>;
   addAttachmentBase64(memoId: string, name: string, mime: string, data: string): Promise<Attachment>;
   removeAttachment(id: string): Promise<void>;
   attachmentThumb(id: string): Promise<string>;
@@ -58,6 +55,7 @@ export interface Backend {
   settings(): Promise<Settings>;
   setTheme(theme: string): Promise<void>;
   setHotkey(accelerator: string): Promise<void>;
+  setSubmitOnEnter(enabled: boolean): Promise<void>;
   setStartAtLogin(enabled: boolean): Promise<void>;
   setRetention(days: number, immediate: boolean): Promise<void>;
   setMCP(enabled: boolean, port: number): Promise<void>;

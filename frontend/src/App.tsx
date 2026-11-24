@@ -537,7 +537,7 @@ export default function App({ backend }: { backend?: Backend }) {
               ) : (
                 <>
                   {view !== "trash" && (
-                    <Composer backend={b} onSaved={refresh} onError={fail} />
+                    <Composer backend={b} onSaved={refresh} onError={fail} submitOnEnter={settings?.submit_on_enter ?? true} />
                   )}
                   <Timeline
                     memos={memos}
@@ -565,6 +565,7 @@ export default function App({ backend }: { backend?: Backend }) {
         <MemoSheet
           memo={selected}
           backend={b}
+          submitOnEnter={settings?.submit_on_enter ?? true}
           onClose={() => setSelected(null)}
           onChanged={(memo) => {
             if (memo) setSelected(memo);

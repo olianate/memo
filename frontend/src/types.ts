@@ -65,7 +65,7 @@ export interface Memo {
   notion_synced_at?: string;
   last_hydrated_at?: string;
   sync_error?: string;
-  blocks: Block[] | null;
+  body: string;
   tags: Tag[] | null;
   attachments: Attachment[] | null;
   day: string;
@@ -99,6 +99,7 @@ export interface SearchResult {
 export interface Settings {
   theme: "light" | "dark" | "system";
   hotkey: string;
+  submit_on_enter: boolean;
   start_at_login: boolean;
   retention_days: number;
   immediate_eviction: boolean;

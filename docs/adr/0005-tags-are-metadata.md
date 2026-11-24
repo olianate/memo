@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-11-21
 
-The editor supports both raw Markdown source and live rendered mode. Keeping `#tag` in the Markdown body would leak tags into source mode and force body rewrites on rename. We decided that tags are first-class metadata in `memo_tags`; `#tag` (no space) is a live-mode shortcut that adds a tag chip and removes the token from the body. Raw source never retains tag tokens and shows tags in a separate chip row. Notion projects tags to a `multi_select` property. Rename and merge update metadata only.
+The editor is a single live-preview Markdown surface. Keeping `#tag` in the Markdown body would force body rewrites on rename. We decided that tags are first-class metadata in `memo_tags`; `#tag` (no space) is an editor shortcut that adds a tag chip and removes the token from the body. The body never retains tag tokens and tags appear in a separate chip row above the editor. Notion projects tags to a `multi_select` property. Rename and merge update metadata only.
 
 ## Consequences
 

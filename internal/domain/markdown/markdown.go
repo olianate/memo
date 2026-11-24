@@ -23,12 +23,12 @@ func Parse(src string) []domain.Block {
 			continue
 		}
 
-		if strings.HasPrefix(trimmed, "```") {
-			lang := strings.TrimSpace(strings.TrimPrefix(trimmed, "```"))
+		if marker, info, ok := fence(line); ok {
 			var code []string
 			i++
 			for ; i < len(lines); i++ {
-				if strings.TrimSpace(lines[i]) == "```" {
+				if closeMarker, closeInfo, closing := fence(lines[i]); closing && closeInfo == "" &&
+					closeMarker[0] == marker[0] && len(closeMarker) >= len(marker) {
 					break
 				}
 				code = append(code, lines[i])
@@ -36,7 +36,7 @@ func Parse(src string) []domain.Block {
 			blocks = append(blocks, domain.Block{
 				ID:       domain.NewID(),
 				Type:     domain.BlockCode,
-				Language: lang,
+				Language: info,
 				Spans:    []domain.Span{{Text: strings.Join(code, "\n")}},
 			})
 			continue
@@ -57,8 +57,9 @@ func Parse(src string) []domain.Block {
 			continue
 		}
 
-		if strings.HasPrefix(trimmed, "> ") || trimmed == ">" {
-			text := strings.TrimPrefix(strings.TrimPrefix(trimmed, "> "), ">")
+		if strings.HasPrefix(trimmed, ">") {
+			text := strings.TrimPrefix(trimmed, ">")
+			text = strings.TrimPrefix(text, " ")
 			blocks = append(blocks, domain.Block{
 				ID:    domain.NewID(),
 				Type:  domain.BlockQuote,
@@ -97,6 +98,27 @@ func Parse(src string) []domain.Block {
 	return blocks
 }
 
+// fence reports an opening or closing fenced-code marker. It accepts up to
+// three leading spaces and backtick or tilde runs of at least three.
+func fence(line string) (marker, info string, ok bool) {
+	s := strings.TrimLeft(line, " ")
+	if len(line)-len(s) > 3 {
+		return "", "", false
+	}
+	if !strings.HasPrefix(s, "```") && !strings.HasPrefix(s, "~~~") {
+		return "", "", false
+	}
+	ch := s[0]
+	n := 0
+	for n < len(s) && s[n] == ch {
+		n++
+	}
+	if n < 3 {
+		return "", "", false
+	}
+	return s[:n], strings.TrimSpace(s[n:]), true
+}
+
 func isDivider(s string) bool {
 	if len(s) < 3 {
 		return false
@@ -114,7 +136,7 @@ func heading(s string) (level int, text string, ok bool) {
 	for n < len(s) && s[n] == '#' {
 		n++
 	}
-	if n < 1 || n > 3 || n >= len(s) || s[n] != ' ' {
+	if n < 1 || n > 6 || n >= len(s) || s[n] != ' ' {
 		return 0, "", false
 	}
 	return n, strings.TrimSpace(s[n+1:]), true
@@ -184,6 +206,39 @@ func attachmentBlock(s string) (domain.Block, bool) {
 	return domain.Block{}, false
 }
 
+// AttachmentLine is the block-level Markdown reference for an attachment.
+func AttachmentLine(kind domain.BlockType, id, name string) string {
+	if kind == domain.BlockImage {
+		return "![" + name + "](attachment://" + id + ")"
+	}
+	return "[" + name + "](attachment://" + id + ")"
+}
+
+// AppendAttachment adds an attachment reference as its own block, preserving
+// every existing byte of the body.
+func AppendAttachment(body string, kind domain.BlockType, id, name string) string {
+	line := AttachmentLine(kind, id, name)
+	trimmed := strings.TrimRight(body, "\n")
+	if strings.TrimSpace(trimmed) == "" {
+		return line
+	}
+	return trimmed + "\n\n" + line
+}
+
+// RemoveAttachment drops the block-level references to one attachment. Other
+// lines, including blank lines, are left untouched.
+func RemoveAttachment(body, id string) string {
+	lines := strings.Split(body, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if block, ok := attachmentBlock(strings.TrimSpace(line)); ok && block.AttachmentID == id {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
+}
+
 // Serialize projects blocks to the supported Markdown subset.
 func Serialize(blocks []domain.Block) string {
 	parts := make([]string, 0, len(blocks))
@@ -194,8 +249,8 @@ func Serialize(blocks []domain.Block) string {
 			if level < 1 {
 				level = 1
 			}
-			if level > 3 {
-				level = 3
+			if level > 6 {
+				level = 6
 			}
 			parts = append(parts, strings.Repeat("#", level)+" "+serializeSpans(b.Spans))
 		case domain.BlockBullet:

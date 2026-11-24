@@ -230,6 +230,30 @@ export function SettingsPage({
             </div>
           </div>
           {settings.hotkey_error && <div className="inline-error">{settings.hotkey_error}</div>}
+          <div className="settings-row">
+            <span>编辑保存键</span>
+            <div className="segmented">
+              <button
+                type="button"
+                className={settings.submit_on_enter ? "is-active" : ""}
+                onClick={() => void run(() => backend.setSubmitOnEnter(true), "编辑快捷键已更新")}
+              >
+                Enter 保存
+              </button>
+              <button
+                type="button"
+                className={!settings.submit_on_enter ? "is-active" : ""}
+                onClick={() => void run(() => backend.setSubmitOnEnter(false), "编辑快捷键已更新")}
+              >
+                Shift+Enter 保存
+              </button>
+            </div>
+          </div>
+          <p className="fine-print">
+            {settings.submit_on_enter
+              ? "Enter 保存，Shift+Enter 换行；快速记录和编辑面板遵循同一设置。"
+              : "Enter 换行，Shift+Enter 保存；快速记录和编辑面板遵循同一设置。"}
+          </p>
           <Toggle
             label="开机时启动 memo"
             checked={settings.start_at_login}

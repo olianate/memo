@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Attachment, Memo } from "../types";
 import type { Backend } from "../backend";
-import { BlockPreview } from "../lib/markdown";
+import { blocksFromMarkdown, BlockPreview } from "../lib/markdown";
 import { groupByDay } from "../lib/group";
 import { dayLabel, formatTime, humanBytes } from "../lib/format";
 import { EmptyState, StatusBadge, TagChip } from "./common";
@@ -89,12 +89,12 @@ export function Timeline({
             </div>
             {group.memos.map((memo) => {
               const open = expanded.has(memo.id);
-              const blocks = memo.blocks ?? [];
+              const blocks = memo.body ? blocksFromMarkdown(memo.body) : [];
               // Evicted attachments keep metadata but no bytes; the eviction
               // banner explains the state instead of rendering broken media.
               const images = (memo.attachments ?? []).filter((a) => a.kind === "image" && a.present);
               const files = (memo.attachments ?? []).filter((a) => a.kind === "file" && a.present);
-              const long = blocks.length > 4;
+              const long = memo.body.split("\n").filter((line) => line.trim()).length > 6;
               const updated = memo.updated_at !== memo.created_at;
               return (
                 <article

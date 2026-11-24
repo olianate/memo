@@ -320,6 +320,31 @@ type Block struct {
 	File             *FileBlock `json:"file,omitempty"`
 
 	Children []Block `json:"children,omitempty"`
+
+	// Raw carries an untouched block payload captured from Notion. It is used
+	// only to restore blocks that the typed model cannot represent.
+	Raw json.RawMessage `json:"-"`
+}
+
+// MarshalJSON returns the captured payload verbatim when present, so a block
+// read from Notion can be written back without losing its shape.
+func (b *Block) UnmarshalJSON(data []byte) error {
+	type plain Block
+	var decoded plain
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*b = Block(decoded)
+	b.Raw = append(json.RawMessage(nil), data...)
+	return nil
+}
+
+func (b Block) MarshalJSON() ([]byte, error) {
+	if len(b.Raw) > 0 {
+		return b.Raw, nil
+	}
+	type plain Block
+	return json.Marshal(plain(b))
 }
 
 // TextBlock is the shared rich-text block payload.

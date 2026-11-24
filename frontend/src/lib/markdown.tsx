@@ -262,6 +262,68 @@ export function blockText(block: Block): string {
   return (block.spans ?? []).map((s) => s.text).join("");
 }
 
+/** Builds a throwaway view projection for previews; never persisted. */
+export function blocksFromMarkdown(source: string): Block[] {
+  const out: Block[] = [];
+  const lines = source.replace(/\r\n/g, "\n").split("\n");
+  let n = 0;
+  const push = (type: Block["type"], text = "", extra: Partial<Block> = {}) => {
+    out.push({ id: `md-${n++}`, type, spans: text ? inlineMarkdownToSpans(text) : [], ...extra });
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    if (line.startsWith("```")) {
+      const language = line.slice(3).trim();
+      const code: string[] = [];
+      for (i++; i < lines.length && lines[i].trim() !== "```"; i++) code.push(lines[i]);
+      push("code", code.join("\n"), { language });
+      continue;
+    }
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) {
+      push("divider");
+      continue;
+    }
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      push("heading", heading[2], { level: heading[1].length });
+      continue;
+    }
+    const todo = line.match(/^[-*+]\s+\[([ xX])\]\s+(.*)$/);
+    if (todo) {
+      push("todo", todo[2], { checked: todo[1].toLowerCase() === "x" });
+      continue;
+    }
+    const bullet = line.match(/^[-*+]\s+(.*)$/);
+    if (bullet) {
+      push("bullet", bullet[1]);
+      continue;
+    }
+    const ordered = line.match(/^\d+[.)]\s+(.*)$/);
+    if (ordered) {
+      push("ordered", ordered[1]);
+      continue;
+    }
+    const quote = line.match(/^>\s?(.*)$/);
+    if (quote) {
+      push("quote", quote[1]);
+      continue;
+    }
+    const image = line.match(/^!\[(.*)\]\(attachment:\/\/(.*)\)$/);
+    if (image) {
+      push("image", "", { alt: image[1], attachment_id: image[2] });
+      continue;
+    }
+    const file = line.match(/^\[(.*)\]\(attachment:\/\/(.*)\)$/);
+    if (file) {
+      push("file", "", { alt: file[1], attachment_id: file[2] });
+      continue;
+    }
+    push("paragraph", line);
+  }
+  return out;
+}
+
 /** Renders a memo body's text blocks for a timeline card or sheet preview. */
 export function BlockPreview({
   blocks,

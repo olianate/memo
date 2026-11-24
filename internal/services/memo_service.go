@@ -8,6 +8,7 @@ import (
 
 	"github.com/olianate/memo/internal/attachments"
 	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/domain/markdown"
 	"github.com/olianate/memo/internal/store"
 	"github.com/olianate/memo/internal/sync"
 )
@@ -40,7 +41,7 @@ func (s *MemoService) List(filter FilterDTO) ([]MemoDTO, error) {
 	}
 	out := make([]MemoDTO, 0, len(memos))
 	for _, m := range memos {
-		out = append(out, toMemoDTO(m, parseBlocks(m)))
+		out = append(out, toMemoDTO(m))
 	}
 	return out, nil
 }
@@ -58,7 +59,7 @@ func (s *MemoService) Get(id string) (MemoDTO, error) {
 			memo = hydrated
 		}
 	}
-	return toMemoDTO(*memo, parseBlocks(*memo)), nil
+	return toMemoDTO(*memo), nil
 }
 
 // Counts returns the sidebar totals.
@@ -70,25 +71,19 @@ func (s *MemoService) Counts() (CountsDTO, error) {
 	return CountsDTO{Notes: notes, Tags: tags, Days: days}, nil
 }
 
-// Create stores a new memo and returns it.
-func (s *MemoService) Create(blocks []domain.Block, tags []string) (MemoDTO, error) {
-	if len(blocks) > 500 {
-		return MemoDTO{}, errors.New("a memo is limited to 500 blocks")
-	}
-	memo, err := s.store.CreateMemo(contextBackground(), store.MemoInput{Blocks: blocks, Tags: cleanTags(tags)})
+// Create stores a new memo body and returns it.
+func (s *MemoService) Create(body string, tags []string) (MemoDTO, error) {
+	memo, err := s.store.CreateMemo(contextBackground(), store.MemoInput{Body: body, Tags: cleanTags(tags)})
 	if err != nil {
 		return MemoDTO{}, err
 	}
 	s.changed(memo.ID)
-	return toMemoDTO(*memo, blocks), nil
+	return toMemoDTO(*memo), nil
 }
 
-// Update edits a memo. An evicted body is hydrated first; if that is not
+// Update edits a memo body. An evicted body is hydrated first; if that is not
 // possible the edit is refused rather than overwriting the archive.
-func (s *MemoService) Update(id string, blocks []domain.Block, tags []string, keepLocal bool) (MemoDTO, error) {
-	if len(blocks) > 500 {
-		return MemoDTO{}, errors.New("a memo is limited to 500 blocks")
-	}
+func (s *MemoService) Update(id string, body string, tags []string, keepLocal bool) (MemoDTO, error) {
 	ctx := contextBackground()
 	memo, err := s.store.GetMemo(ctx, id)
 	if err != nil {
@@ -102,19 +97,19 @@ func (s *MemoService) Update(id string, blocks []domain.Block, tags []string, ke
 			return MemoDTO{}, fmt.Errorf("hydrate before editing: %w", err)
 		}
 	}
-	if err := s.validateAttachmentIDs(ctx, id, blocks); err != nil {
+	if err := s.validateAttachmentIDs(ctx, id, body); err != nil {
 		return MemoDTO{}, err
 	}
-	updated, err := s.store.UpdateMemo(ctx, id, blocks, cleanTags(tags), &keepLocal)
+	updated, err := s.store.UpdateMemo(ctx, id, body, cleanTags(tags), &keepLocal)
 	if err != nil {
 		return MemoDTO{}, err
 	}
 	s.changed(id)
-	return toMemoDTO(*updated, blocks), nil
+	return toMemoDTO(*updated), nil
 }
 
-func (s *MemoService) validateAttachmentIDs(ctx context.Context, memoID string, blocks []domain.Block) error {
-	for _, b := range blocks {
+func (s *MemoService) validateAttachmentIDs(ctx context.Context, memoID, body string) error {
+	for _, b := range markdown.Parse(body) {
 		if b.Type != domain.BlockImage && b.Type != domain.BlockFile {
 			continue
 		}
@@ -151,7 +146,7 @@ func (s *MemoService) Restore(id string) (MemoDTO, error) {
 		_ = s.store.ClearPurgedPage(ctx, memo.NotionPageID)
 	}
 	s.changed(id)
-	return toMemoDTO(*memo, parseBlocks(*memo)), nil
+	return toMemoDTO(*memo), nil
 }
 
 // Purge permanently removes one memo from the local trash. A Notion page is
@@ -212,18 +207,8 @@ func (s *MemoService) SetKeepLocal(id string, keep bool) error {
 	return nil
 }
 
-// ParseMarkdown is the raw-editor → AST path. The canonical body stays blocks.
-func (s *MemoService) ParseMarkdown(source string) []domain.Block {
-	return markdownParse(source)
-}
-
-// SerializeMarkdown is the AST → raw-editor path.
-func (s *MemoService) SerializeMarkdown(blocks []domain.Block) string {
-	return markdownSerialize(blocks)
-}
-
 // AddAttachmentBase64 ingests a file from the webview. It appends the matching
-// attachment block to the memo so the change is durable immediately.
+// attachment reference to the Markdown body so the change is durable immediately.
 func (s *MemoService) AddAttachmentBase64(memoID, name, mime, data string) (AttachmentDTO, error) {
 	if len(data) > 96<<20 {
 		return AttachmentDTO{}, errors.New("file is too large")
@@ -244,24 +229,24 @@ func (s *MemoService) AddAttachmentBase64(memoID, name, mime, data string) (Atta
 	if err != nil {
 		return AttachmentDTO{}, err
 	}
-	blocks := parseBlocks(*memo)
-	blockType := domain.BlockFile
-	if att.Kind == domain.AttachmentImage {
-		blockType = domain.BlockImage
-	}
-	blocks = append(blocks, domain.Block{
-		ID: domain.NewID(), Type: blockType, AttachmentID: att.ID, Alt: att.OriginalName,
-	})
+	body := markdown.AppendAttachment(memo.Body, blockTypeFor(att.Kind), att.ID, att.OriginalName)
 	tags := make([]string, 0, len(memo.Tags))
 	for _, t := range memo.Tags {
 		tags = append(tags, t.Name)
 	}
-	if _, err := s.store.UpdateMemo(ctx, memoID, blocks, tags, nil); err != nil {
+	if _, err := s.store.UpdateMemo(ctx, memoID, body, tags, nil); err != nil {
 		_ = s.attachments.Remove(ctx, att.ID)
 		return AttachmentDTO{}, err
 	}
 	s.changed(memoID)
 	return toAttachmentDTO(*att), nil
+}
+
+func blockTypeFor(kind domain.AttachmentKind) domain.BlockType {
+	if kind == domain.AttachmentImage {
+		return domain.BlockImage
+	}
+	return domain.BlockFile
 }
 
 // RemoveAttachment deletes an attachment and its block from the memo body.
@@ -275,19 +260,13 @@ func (s *MemoService) RemoveAttachment(id string) error {
 	if err != nil {
 		return err
 	}
-	blocks := parseBlocks(*memo)
-	kept := blocks[:0]
-	for _, b := range blocks {
-		if b.AttachmentID != id {
-			kept = append(kept, b)
-		}
-	}
+	body := markdown.RemoveAttachment(memo.Body, id)
 	tags := make([]string, 0, len(memo.Tags))
 	for _, t := range memo.Tags {
 		tags = append(tags, t.Name)
 	}
 	if memo.LocalState == domain.LocalPresent {
-		if _, err := s.store.UpdateMemo(ctx, memo.ID, kept, tags, nil); err != nil {
+		if _, err := s.store.UpdateMemo(ctx, memo.ID, body, tags, nil); err != nil {
 			return err
 		}
 	}
@@ -326,5 +305,5 @@ func (s *MemoService) Hydrate(id string) (MemoDTO, error) {
 	if err != nil {
 		return MemoDTO{}, err
 	}
-	return toMemoDTO(*memo, parseBlocks(*memo)), nil
+	return toMemoDTO(*memo), nil
 }

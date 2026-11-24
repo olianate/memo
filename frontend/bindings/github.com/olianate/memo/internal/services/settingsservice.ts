@@ -124,6 +124,14 @@ export function SetStartAtLogin(enabled: boolean): $CancellablePromise<void> {
 }
 
 /**
+ * SetSubmitOnEnter chooses whether Enter saves and Shift+Enter inserts a
+ * newline (true), or Enter inserts a newline and Shift+Enter saves (false).
+ */
+export function SetSubmitOnEnter(enabled: boolean): $CancellablePromise<void> {
+    return $Call.ByID(532029270, enabled);
+}
+
+/**
  * SetTheme persists light, dark, or system.
  */
 export function SetTheme(theme: string): $CancellablePromise<void> {

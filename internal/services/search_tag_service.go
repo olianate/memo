@@ -31,7 +31,7 @@ func (s *SearchService) Query(query, tag, from, to string) ([]SearchResultDTO, e
 	out := make([]SearchResultDTO, 0, len(results))
 	for _, r := range results {
 		out = append(out, SearchResultDTO{
-			Memo:   toMemoDTO(r.Memo, parseBlocks(r.Memo)),
+			Memo:   toMemoDTO(r.Memo),
 			Before: r.Snippet.Before, Match: r.Snippet.Match, After: r.Snippet.After,
 		})
 	}

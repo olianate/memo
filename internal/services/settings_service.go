@@ -28,6 +28,7 @@ type Hooks interface {
 type SettingsDTO struct {
 	Theme              string `json:"theme"`
 	Hotkey             string `json:"hotkey"`
+	SubmitOnEnter      bool   `json:"submit_on_enter"`
 	StartAtLogin       bool   `json:"start_at_login"`
 	RetentionDays      int    `json:"retention_days"`
 	ImmediateEviction  bool   `json:"immediate_eviction"`
@@ -85,6 +86,7 @@ func (s *SettingsService) Get() SettingsDTO {
 	return SettingsDTO{
 		Theme:              s.cfg.Get(ctx, config.KeyTheme),
 		Hotkey:             s.cfg.Get(ctx, config.KeyHotkey),
+		SubmitOnEnter:      s.cfg.Bool(ctx, config.KeySubmitOnEnter),
 		StartAtLogin:       s.cfg.Bool(ctx, config.KeyStartAtLogin),
 		RetentionDays:      s.cfg.Int(ctx, config.KeyRetentionDays),
 		ImmediateEviction:  s.cfg.Bool(ctx, config.KeyRetentionImmediate),
@@ -127,6 +129,12 @@ func (s *SettingsService) SetHotkey(accelerator string) error {
 		}
 	}
 	return s.cfg.Set(context.Background(), config.KeyHotkey, accelerator)
+}
+
+// SetSubmitOnEnter chooses whether Enter saves and Shift+Enter inserts a
+// newline (true), or Enter inserts a newline and Shift+Enter saves (false).
+func (s *SettingsService) SetSubmitOnEnter(enabled bool) error {
+	return s.cfg.SetBool(context.Background(), config.KeySubmitOnEnter, enabled)
 }
 
 // SetStartAtLogin applies and persists login startup.

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Composer } from "./Composer";
 import { demoBackend } from "../demoBackend";
+import { setEditorBody } from "../test/editor";
 
 describe("Composer", () => {
   it("saves typed text through the backend seam", async () => {
@@ -14,22 +15,16 @@ describe("Composer", () => {
       deleted: false,
       keep_local: false,
       local_state: "present",
-      blocks: [],
+      body: "",
       tags: [],
       attachments: [],
       day: "2026-11-21",
     });
     render(<Composer backend={demoBackend} onSaved={() => {}} onError={() => {}} />);
-    const editor = document.querySelector<HTMLElement>(".ed-input");
-    expect(editor).not.toBeNull();
-    if (editor) {
-      editor.textContent = "hello from composer";
-      fireEvent.input(editor);
-    }
+    setEditorBody("hello from composer");
     fireEvent.click(screen.getByRole("button", { name: "保存笔记" }));
     await waitFor(() => expect(create).toHaveBeenCalled());
-    const blocks = create.mock.calls[0][0];
-    expect(blocks[0].spans?.[0]?.text).toBe("hello from composer");
+    expect(create.mock.calls[0][0]).toBe("hello from composer");
     create.mockRestore();
   });
 
