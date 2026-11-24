@@ -149,7 +149,13 @@ export function Timeline({
                     </div>
                   ) : (
                     <div className={`memo-body ${open ? "is-open" : ""}`}>
-                      <BlockPreview blocks={blocks} limit={open ? 500 : 4} />
+                      <BlockPreview
+                        blocks={blocks}
+                        limit={open ? 500 : 4}
+                        onOpenLink={(url) => {
+                          backend.openURL(url).catch((err) => onError(String(err)));
+                        }}
+                      />
                     </div>
                   )}
 

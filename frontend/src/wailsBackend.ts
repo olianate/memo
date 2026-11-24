@@ -110,6 +110,9 @@ export const wailsBackend: Backend = {
   async openAttachment(id) {
     await MemoSvc.OpenAttachment(id);
   },
+  async openURL(url) {
+    await PlatformSvc.OpenURL(url);
+  },
 
   async tags() {
     return ((await TagSvc.List()) ?? []).map(asTag);
@@ -160,6 +163,9 @@ export const wailsBackend: Backend = {
   },
   async setRetention(days, immediate) {
     await SettingsSvc.SetRetention(days, immediate);
+  },
+  async setMCP(enabled, port) {
+    await SettingsSvc.SetMCP(enabled, port);
   },
   async rebuildIndex() {
     await SettingsSvc.RebuildIndex();

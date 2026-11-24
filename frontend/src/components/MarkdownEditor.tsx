@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Attachment, Block } from "../types";
 import type { Backend } from "../backend";
-import { inlineMarkdownToSpans, removeSpanRange, spansFromDOM, spansToHtml, blockText } from "../lib/markdown";
+import { escapeHtml, inlineMarkdownToSpans, removeSpanRange, safeLinkUrl, spansFromDOM, spansToHtml, blockText } from "../lib/markdown";
 import { extractTagToken, matchInputRule, normalizeTag, removeTagToken, type TagToken } from "../lib/tag";
 import { humanBytes } from "../lib/format";
-import { CloseIcon, FileIcon, ImageIcon, PaperclipIcon, PlusIcon } from "./Icons";
+import { CloseIcon, FileIcon, ImageIcon, LinkIcon, PaperclipIcon, PlusIcon } from "./Icons";
 
 let idCounter = 0;
 const nextId = () => `blk-${Date.now().toString(36)}-${(idCounter++).toString(36)}`;
@@ -369,6 +369,31 @@ export function MarkdownEditor({
     updateBlock(activeBlock.id, { spans: spansFromDOM(el) });
   };
 
+  const insertLink = () => {
+    if (!activeBlock) return;
+    const el = editorRoot.current?.querySelector<HTMLElement>(`[data-block="${activeBlock.id}"] .ed-input`);
+    if (!el) return;
+    el.focus();
+    const selection = window.getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+    const selected = selection?.toString() ?? "";
+    const raw = window.prompt("链接地址", "https://");
+    if (raw === null) return;
+    const href = safeLinkUrl(raw);
+    if (!href) {
+      window.alert("请输入有效的 http(s)、mailto 链接或域名");
+      return;
+    }
+    el.focus();
+    if (selection && range) {
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    const label = selected.trim() ? selected : href;
+    document.execCommand("insertHTML", false, `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`);
+    updateBlock(activeBlock.id, { spans: spansFromDOM(el) });
+  };
+
   const switchToSource = async () => {
     setSwitching(true);
     try {
@@ -473,6 +498,9 @@ export function MarkdownEditor({
           </button>
           <button type="button" className="tool-btn" title="行内代码" aria-label="行内代码" onMouseDown={(e) => e.preventDefault()} onClick={() => executeInline("code")}>
             <code>{"</>"}</code>
+          </button>
+          <button type="button" className="tool-btn" title="插入链接" aria-label="插入链接" onMouseDown={(e) => e.preventDefault()} onClick={insertLink}>
+            <LinkIcon size={15} />
           </button>
         </div>
         <div className="toolbar-group toolbar-spacer">

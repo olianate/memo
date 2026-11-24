@@ -20,6 +20,7 @@ import (
 	"github.com/olianate/memo/internal/attachments"
 	"github.com/olianate/memo/internal/config"
 	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/mcpserver"
 	"github.com/olianate/memo/internal/platform"
 	"github.com/olianate/memo/internal/search"
 	"github.com/olianate/memo/internal/services"
@@ -77,6 +78,7 @@ func main() {
 	tagSvc := services.NewTagService(st, emit)
 	searchBoundary := services.NewSearchService(searchSvc)
 	statsBoundary := services.NewStatsService(statsSvc)
+	mcpSvc := mcpserver.New(memoSvc, searchBoundary)
 	settingsSvc := services.NewSettingsService(st, cfg, dataDir, hooks, keychain)
 	syncBoundary := services.NewSyncService(syncSvc, cfg, st, keychain, emit)
 	platformSvc := services.NewPlatformService(hooks, cfg)
@@ -123,6 +125,7 @@ func main() {
 			if x, y := hooks.stickyPosition(); x != 0 || y != 0 {
 				_ = hooks.SaveStickyPosition(x, y)
 			}
+			_ = mcpSvc.Stop()
 			cancel()
 		},
 	})
@@ -171,6 +174,7 @@ func main() {
 	hooks.mainWindow = mainWindow
 	hooks.sticky = sticky
 	hooks.emit = emit
+	hooks.mcp = mcpSvc
 
 	// Smoke-test hook: show quick capture without relying on the global hotkey.
 	// It runs after app.Run has started the window loop.
@@ -220,6 +224,16 @@ func main() {
 	tray = buildTray(app, hooks, syncBoundary, showSticky)
 	applyTrayStatus(tray, syncSvc.Status(ctx))
 
+	if cfg.Bool(ctx, config.KeyMCPEnabled) {
+		port := cfg.Int(ctx, config.KeyMCPPort)
+		if port < 1024 || port > 65535 {
+			port = 8765
+		}
+		if err := mcpSvc.Start(port); err != nil {
+			log.Printf("memo: MCP server: %v", err)
+		}
+	}
+
 	syncSvc.Start(ctx)
 	updateSvc.Start(ctx)
 	err = app.Run()
@@ -234,6 +248,7 @@ type appHooks struct {
 	sticky     *application.WebviewWindow
 	cfg        *config.Store
 	emit       func(string, any)
+	mcp        *mcpserver.Service
 
 	pendingViewMu sync.Mutex
 	pendingView   string
@@ -280,6 +295,23 @@ func (h *appHooks) ApplyStartAtLogin(enabled bool) error {
 }
 
 func (h *appHooks) OpenPath(path string) error { return platform.RevealPath(path) }
+
+func (h *appHooks) ApplyMCP(enabled bool, port int) error {
+	if h.mcp == nil {
+		return nil
+	}
+	if !enabled {
+		return h.mcp.Stop()
+	}
+	return h.mcp.Start(port)
+}
+
+func (h *appHooks) MCPStatus() (bool, string, string) {
+	if h.mcp == nil {
+		return false, "", ""
+	}
+	return h.mcp.Status()
+}
 
 func (h *appHooks) OpenURL(url string) error {
 	if h.app == nil {

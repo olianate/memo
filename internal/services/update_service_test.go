@@ -85,9 +85,9 @@ func TestUpdateServiceCheck(t *testing.T) {
 		userAgent = r.Header.Get("User-Agent")
 		accept = r.Header.Get("Accept")
 		_ = json.NewEncoder(w).Encode(githubRelease{
-			TagName:     "v1.2.0",
+			TagName:     "v1.3.0",
 			Body:        "## 更新内容\n- 修复问题",
-			HTMLURL:     "https://github.com/olianate/memo/releases/tag/v1.2.0",
+			HTMLURL:     "https://github.com/olianate/memo/releases/tag/v1.3.0",
 			PublishedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 			Assets: []releaseAsset{
 				{Name: "memo-windows-amd64-installer.exe", BrowserDownloadURL: "https://example.test/memo.exe", Size: 123},
@@ -106,7 +106,7 @@ func TestUpdateServiceCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !info.Available || info.LatestVersion != "1.2.0" || info.CurrentVersion != Version {
+	if !info.Available || info.LatestVersion != "1.3.0" || info.CurrentVersion != Version {
 		t.Fatalf("unexpected info: %+v", info)
 	}
 	switch runtime.GOOS {
@@ -142,7 +142,7 @@ func TestUpdateServiceCheck(t *testing.T) {
 	}
 
 	status := svc.Status()
-	if status.LatestVersion != "1.2.0" {
+	if status.LatestVersion != "1.3.0" {
 		t.Fatalf("status = %+v", status)
 	}
 }

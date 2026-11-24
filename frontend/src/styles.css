@@ -1383,6 +1383,13 @@ button.tag-chip:hover,
   margin: 0;
 }
 
+.memo-body a,
+.ed-input a {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .memo-body .md-paragraph + .md-paragraph {
   margin-top: 3px;
 }

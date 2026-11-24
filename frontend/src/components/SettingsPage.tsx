@@ -82,6 +82,7 @@ export function SettingsPage({
   const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
   const [updateError, setUpdateError] = useState("");
+  const [mcpPort, setMcpPort] = useState("8765");
 
   const reload = async () => {
     const [s, st, nextTags, nextErrors] = await Promise.all([
@@ -95,6 +96,7 @@ export function SettingsPage({
     setTags(nextTags);
     setErrors(nextErrors);
     setHotkey(s.hotkey);
+    setMcpPort(String(s.mcp_port));
   };
 
   useEffect(() => {
@@ -436,6 +438,44 @@ export function SettingsPage({
               </button>
             </>
           )}
+        </Card>
+
+        <Card title="MCP 服务" hint="让本地 AI 客户端通过 Model Context Protocol 搜索、创建、修改和删除记录。">
+          <Toggle
+            label="启用 MCP 服务"
+            checked={settings.mcp_enabled}
+            onChange={(value) => void run(() => backend.setMCP(value, Number(mcpPort) || settings.mcp_port), value ? "MCP 服务已启用" : "MCP 服务已关闭")}
+          />
+          <div className="settings-row">
+            <span>监听端口</span>
+            <div className="inline-form">
+              <input
+                type="number"
+                min={1024}
+                max={65535}
+                value={mcpPort}
+                onChange={(e) => setMcpPort(e.target.value)}
+                aria-label="MCP 端口"
+              />
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={busy}
+                onClick={() => void run(() => backend.setMCP(settings.mcp_enabled, Number(mcpPort)), "MCP 端口已保存")}
+              >
+                保存
+              </button>
+            </div>
+          </div>
+          {settings.mcp_running ? (
+            <div className="result-line">
+              MCP 端点：<code>{settings.mcp_endpoint}</code>
+            </div>
+          ) : (
+            <div className="muted">服务未运行。启用后客户端使用 Streamable HTTP 连接。</div>
+          )}
+          {settings.mcp_error && <div className="inline-error">{settings.mcp_error}</div>}
+          <p className="fine-print">仅监听 127.0.0.1，不对局域网开放；没有额外鉴权，本机进程均可访问。端点路径为 /mcp，提供 search_memos、create_memo、update_memo、delete_memo 工具。</p>
         </Card>
 
         <Card title="错误日志" hint="界面错误会连同堆栈和上下文写入本地日志；导出时会自动隐藏令牌。">

@@ -32,6 +32,8 @@ const (
 	KeyLastSyncAt         = "sync.last_success_at"
 	KeyLastPullAt         = "sync.last_pull_at"
 	KeyOnboarded          = "app.onboarded"
+	KeyMCPEnabled         = "mcp.enabled"
+	KeyMCPPort            = "mcp.port"
 )
 
 // Defaults are used when a key is absent.
@@ -42,6 +44,8 @@ var Defaults = map[string]string{
 	KeyHotkey:             "CmdOrCtrl+Shift+Space",
 	KeyStartAtLogin:       "false",
 	KeyWorkspaceFileLimit: "5242880",
+	KeyMCPEnabled:         "false",
+	KeyMCPPort:            "8765",
 }
 
 // Store is a typed view of the settings table.

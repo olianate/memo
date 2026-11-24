@@ -110,6 +110,11 @@ export interface Settings {
   data_dir: string;
   onboarded: boolean;
   hotkey_error?: string;
+  mcp_enabled: boolean;
+  mcp_port: number;
+  mcp_running: boolean;
+  mcp_endpoint?: string;
+  mcp_error?: string;
   version: string;
 }
 

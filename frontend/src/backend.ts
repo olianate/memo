@@ -44,6 +44,7 @@ export interface Backend {
   attachmentThumb(id: string): Promise<string>;
   attachmentData(id: string): Promise<string>;
   openAttachment(id: string): Promise<void>;
+  openURL(url: string): Promise<void>;
 
   tags(): Promise<Tag[]>;
   suggestTags(query: string): Promise<Tag[]>;
@@ -59,6 +60,7 @@ export interface Backend {
   setHotkey(accelerator: string): Promise<void>;
   setStartAtLogin(enabled: boolean): Promise<void>;
   setRetention(days: number, immediate: boolean): Promise<void>;
+  setMCP(enabled: boolean, port: number): Promise<void>;
   rebuildIndex(): Promise<void>;
   deleteLocalData(): Promise<void>;
   exportBackup(): Promise<BackupResult>;

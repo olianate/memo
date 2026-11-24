@@ -20,6 +20,22 @@ function updateInfo(overrides: Partial<UpdateInfo> = {}): UpdateInfo {
   };
 }
 
+describe("SettingsPage MCP", () => {
+  it("enables the MCP server on the configured port", async () => {
+    const setMCP = vi.fn(async () => undefined);
+    const backend = {
+      ...demoBackend,
+      settings: async () => ({ ...(await demoBackend.settings()), onboarded: true }),
+      setMCP,
+    };
+
+    render(<SettingsPage backend={backend} onSettingsChanged={() => {}} onError={() => {}} />);
+
+    fireEvent.click(await screen.findByRole("switch", { name: "启用 MCP 服务" }));
+    await waitFor(() => expect(setMCP).toHaveBeenCalledWith(true, 8765));
+  });
+});
+
 describe("SettingsPage updates", () => {
   it("checks on mount and installs an available update", async () => {
     const checkForUpdates = vi.fn(async () => updateInfo());

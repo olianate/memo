@@ -25,6 +25,13 @@ export function HideSticky(): $CancellablePromise<void> {
 }
 
 /**
+ * OpenURL opens an http(s) link in the system browser.
+ */
+export function OpenURL(url: string): $CancellablePromise<void> {
+    return $Call.ByID(235773466, url);
+}
+
+/**
  * Quit exits the app.
  */
 export function Quit(): $CancellablePromise<void> {

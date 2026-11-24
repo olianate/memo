@@ -58,6 +58,9 @@ class DemoStore {
     workspace_file_limit: 5 * 1024 * 1024,
     data_dir: "C:\\Users\\you\\AppData\\Roaming\\memo",
     onboarded: true,
+    mcp_enabled: false,
+    mcp_port: 8765,
+    mcp_running: false,
     version: "0.1.0",
   };
   attachments = new Map<string, { data: string; mime: string; thumb?: string }>();
@@ -552,6 +555,9 @@ export const demoBackend: Backend = {
   async openAttachment() {
     return;
   },
+  async openURL(url) {
+    if (typeof window !== "undefined") window.open(url, "_blank", "noopener,noreferrer");
+  },
 
   async tags() {
     return demo.tagList.map((t) => ({ ...t }));
@@ -624,6 +630,13 @@ export const demoBackend: Backend = {
   async setRetention(days, immediate) {
     demo.settings.retention_days = days;
     demo.settings.immediate_eviction = immediate;
+  },
+  async setMCP(enabled, port) {
+    demo.settings.mcp_enabled = enabled;
+    demo.settings.mcp_port = port;
+    demo.settings.mcp_running = enabled;
+    demo.settings.mcp_endpoint = enabled ? `http://127.0.0.1:${port}/mcp` : undefined;
+    demo.settings.mcp_error = undefined;
   },
   async rebuildIndex() {
     return;
