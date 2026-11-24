@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Dashboard } from "../types";
-import type { Backend } from "../backend";
+import type { StatsBackend } from "../backend";
 import { currentMonth, formatMonth, humanBytes } from "../lib/format";
 import { Heatmap } from "./common";
 import { RefreshIcon } from "./Icons";
@@ -30,7 +30,7 @@ export function StatsPage({
   onError,
   initialMonth,
 }: {
-  backend: Backend;
+  backend: StatsBackend;
   onError: (message: string) => void;
   initialMonth?: string;
 }) {

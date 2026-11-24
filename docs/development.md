@@ -13,7 +13,7 @@ and packaging.
 ```
 main.go                       Wails application, windows, tray, hotkey
 internal/
-  domain/                     memo, block AST, tags, Markdown parser/serializer
+  domain/                     memo, Markdown body model, tags, parser/serializer
   store/                      SQLite schema, transactions, outbox, settings
   search/                     FTS5 trigram + LIKE fallback
   stats/                      metadata-driven dashboard queries
@@ -83,6 +83,33 @@ wails3 task common:generate:bindings
 The task runs `wails3 generate bindings -clean`, which deletes and rewrites the
 whole tree. Never hand-edit those files.
 
+## Body flow
+
+The editor owns a single Markdown string. The frontend never sends a block
+tree: `create` and `update` pass `body: string`, and the store writes it to
+`body_md` byte for byte. On every write it derives `body_text`, `snippet`,
+`block_stats`, `content_hash` and the FTS row by parsing the supported Markdown
+subset; the body itself is never normalized or re-serialized.
+
+Live preview uses Atomic Editor (`@atomic-editor/editor`), a CodeMirror 6
+inline-preview surface. It receives the body as `markdownSource` and emits the
+exact Markdown on every edit. Replacing the body from outside the editor (memo
+switch, attachment upload) remounts it, so the editor's document never drifts
+from `body_md`. There is no separate whole-document source mode; clicking a
+rendered line exposes its Markdown source in place.
+
+Push parses `body_md` into Notion blocks only at the sync boundary. Pull maps
+Notion blocks back to Markdown, including a ` ```notion ` fence for blocks with
+no Markdown form, and writes the result to `body_md`. Attachments stay
+`attachment://id` references in the body; bytes move only when Notion uploads or
+downloads them.
+
+The block subset is pinned by one fixture suite,
+`frontend/src/test/markdown-suite.json`. Both `internal/domain/markdown` and the
+frontend preview parser run it, so the editor's projection and the sync
+projection cannot drift. Preview-only syntax (tables) stays out of the suite:
+the sync projection has no table block and keeps such lines as paragraphs.
+
 ## Notion setup
 
 1. Create a Notion integration and copy its personal access token.
@@ -106,7 +133,7 @@ See `adr/0001-notion-as-optional-archive.md`,
 ## Packaging
 
 The app version shown in Settings lives in `internal/services/version.go`
-(currently `1.2.0`). Keep `build/config.yml`, `build/windows/info.json` and
+(currently `1.3.0`). Keep `build/config.yml`, `build/windows/info.json` and
 `build/darwin/Info*.plist` in sync when bumping it.
 
 ### Windows NSIS installer
@@ -134,7 +161,7 @@ the production binary from `wails3 build`, then:
 ```powershell
 # Download and extract wix314-binaries.zip first:
 #   https://github.com/wixtoolset/wix3/releases/tag/wix3141rtm
-.\build\windows\msi\build.ps1 -Version 1.2.0 -WixDir C:\path\to\wix314
+.\build\windows\msi\build.ps1 -Version 1.3.0 -WixDir C:\path\to\wix314
 # -> bin/memo-windows-amd64.msi
 ```
 
@@ -232,7 +259,7 @@ steps, so it can be called as a reusable workflow.
 NSIS + MSI packages, builds the macOS universal DMG, writes `SHA256SUMS.txt` and
 publishes a GitHub Release with the stable asset names used by the README
 download links. Release notes are read from `docs/releases/<tag>.md` (for
-example `docs/releases/v1.2.0.md`); commit that file before pushing the tag.
+example `docs/releases/v1.3.0.md`); commit that file before pushing the tag.
 If it is absent, the workflow falls back to a generic summary. The workflow can
 also be triggered manually to exercise the build jobs without publishing.
 
@@ -252,6 +279,9 @@ also be triggered manually to exercise the build jobs without publishing.
 - The FTS index retains tokenized text after body eviction. This is deliberate
   so search still works.
 - Notion cannot permanently delete pages or revoke uploaded file objects.
-- Notion-side body edits are not pulled; the app is the writer.
-- Markdown tables, HTML, math, footnotes and embeds stay literal text.
+- Notion round-trips are lossy outside the supported Markdown subset: tables,
+  HTML, math, footnotes, embeds and nested-list nesting stay literal locally and
+  are flattened or preserved as a `notion` fence when pushed.
+- A profile created by the block-AST version is rejected at startup with a
+  message to reset local data; there is no in-place migration.
 - macOS IME is untested by decision.

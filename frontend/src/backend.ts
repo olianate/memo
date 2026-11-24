@@ -3,8 +3,8 @@ import type {
   ArchiveDatabasePreview,
   ArchiveTarget,
   Attachment,
+  AttachmentPayload,
   BackupResult,
-  Block,
   ConnectRequest,
   ConnectResult,
   Counts,
@@ -29,17 +29,17 @@ export interface Backend {
   list(filter?: Filter): Promise<Memo[]>;
   get(id: string): Promise<Memo>;
   counts(): Promise<Counts>;
-  create(blocks: Block[], tags: string[]): Promise<Memo>;
-  update(id: string, blocks: Block[], tags: string[], keepLocal: boolean): Promise<Memo>;
+  create(body: string, tags: string[]): Promise<Memo>;
+  createWithAttachments(body: string, tags: string[], files: AttachmentPayload[]): Promise<Memo>;
+  update(id: string, body: string, tags: string[], keepLocal: boolean): Promise<Memo>;
   remove(id: string): Promise<void>;
   restore(id: string): Promise<Memo>;
   purgeMemo(id: string): Promise<void>;
   emptyTrash(): Promise<number>;
   setKeepLocal(id: string, keep: boolean): Promise<void>;
   hydrate(id: string): Promise<Memo>;
-  parseMarkdown(source: string): Promise<Block[]>;
-  serializeMarkdown(blocks: Block[]): Promise<string>;
   addAttachmentBase64(memoId: string, name: string, mime: string, data: string): Promise<Attachment>;
+  addAttachments(memoId: string, files: AttachmentPayload[]): Promise<Attachment[]>;
   removeAttachment(id: string): Promise<void>;
   attachmentThumb(id: string): Promise<string>;
   attachmentData(id: string): Promise<string>;
@@ -58,6 +58,7 @@ export interface Backend {
   settings(): Promise<Settings>;
   setTheme(theme: string): Promise<void>;
   setHotkey(accelerator: string): Promise<void>;
+  setSubmitOnEnter(enabled: boolean): Promise<void>;
   setStartAtLogin(enabled: boolean): Promise<void>;
   setRetention(days: number, immediate: boolean): Promise<void>;
   setMCP(enabled: boolean, port: number): Promise<void>;
@@ -65,6 +66,7 @@ export interface Backend {
   deleteLocalData(): Promise<void>;
   exportBackup(): Promise<BackupResult>;
   exportLogs(): Promise<string>;
+  clearLogs(): Promise<void>;
   reportError(report: ErrorReport): Promise<void>;
   errorLogs(): Promise<SyncLog[]>;
   openDataDir(): Promise<void>;
@@ -96,6 +98,100 @@ export interface Backend {
   quit(): Promise<void>;
   saveStickyPosition(x: number, y: number): Promise<void>;
 }
+
+// Callers depend on the slice they actually use. Backend is the composition of
+// those slices; the two adapters satisfy the whole surface.
+export type MarkdownEditorBackend = Pick<
+  Backend,
+  "attachmentData" | "attachmentThumb" | "openAttachment" | "openURL" | "suggestTags"
+>;
+export type MemoListBackend = Pick<Backend, "list" | "remove" | "purgeMemo" | "setKeepLocal"> &
+  MarkdownEditorBackend;
+export type MemoDraftBackend = Pick<
+  Backend,
+  "create" | "createWithAttachments" | "update" | "addAttachments" | "get" | "removeAttachment"
+> &
+  MarkdownEditorBackend;
+export type MemoSheetBackend = Pick<
+  Backend,
+  | "get"
+  | "hydrate"
+  | "update"
+  | "remove"
+  | "purgeMemo"
+  | "restore"
+  | "setKeepLocal"
+  | "addAttachments"
+  | "removeAttachment"
+> &
+  MarkdownEditorBackend;
+export type OnboardingBackend = Pick<
+  Backend,
+  | "settings"
+  | "setHotkey"
+  | "setStartAtLogin"
+  | "completeOnboarding"
+  | "connect"
+  | "parentPages"
+  | "previewArchiveDatabase"
+  | "resolveArchiveTarget"
+  | "validateToken"
+>;
+export type StatsBackend = Pick<Backend, "dashboard">;
+export type SettingsControllerBackend = Pick<
+  Backend,
+  | "settings"
+  | "syncStatus"
+  | "tags"
+  | "errorLogs"
+  | "setTheme"
+  | "exportBackup"
+  | "restoreAll"
+  | "exportLogs"
+  | "checkForUpdates"
+  | "installUpdate"
+  | "openReleasePage"
+>;
+export type SettingsPageBackend = SettingsControllerBackend &
+  OnboardingBackend &
+  Pick<
+    Backend,
+    | "clearLogs"
+    | "deleteLocalData"
+    | "deleteTag"
+    | "disconnect"
+    | "mergeTags"
+    | "openDataDir"
+    | "rebuildIndex"
+    | "renameTag"
+    | "setHotkey"
+    | "setMCP"
+    | "setRetention"
+    | "setStartAtLogin"
+    | "setSubmitOnEnter"
+    | "setSyncEnabled"
+    | "setSyncPaused"
+    | "syncNow"
+  >;
+export type StickyBackend = Pick<
+  Backend,
+  | "reportError"
+  | "tags"
+  | "settings"
+  | "syncStatus"
+  | "create"
+  | "createWithAttachments"
+  | "update"
+  | "get"
+  | "addAttachments"
+  | "removeAttachment"
+  | "attachmentData"
+  | "attachmentThumb"
+  | "openAttachment"
+  | "openURL"
+  | "suggestTags"
+  | "hideSticky"
+>;
 
 export function isWailsRuntime(): boolean {
   if (typeof window === "undefined") return false;

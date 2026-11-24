@@ -8,7 +8,9 @@ import (
 
 	"github.com/olianate/memo/internal/config"
 	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/domain/markdown"
 	"github.com/olianate/memo/internal/notion"
+	"github.com/olianate/memo/internal/presence"
 )
 
 // PushOnce drains up to 20 due outbox rows. Pushing is single-concurrency to
@@ -130,16 +132,13 @@ func (s *Service) pushOne(ctx context.Context, g notion.Gateway, ds string, memo
 		return nil
 	}
 
-	if memo.LocalState == domain.LocalEvicted {
+	if presence.Evicted(*memo) {
 		return errors.New("memo body is evicted; hydrate before editing")
 	}
 	if err := s.ensureTagOptions(ctx, g, ds, memo.Tags); err != nil {
 		return err
 	}
-	blocks, err := memo.Blocks()
-	if err != nil {
-		return err
-	}
+	blocks := markdown.Parse(memo.Body)
 	uploads, err := s.uploadAttachments(ctx, g, memo)
 	if err != nil {
 		return err
@@ -355,10 +354,7 @@ func (s *Service) replaceChildren(ctx context.Context, g notion.Gateway, pageID 
 // mapAttachmentBlocks pairs image/file children with attachment metadata so a
 // later hydration can find the block again.
 func (s *Service) mapAttachmentBlocks(ctx context.Context, g notion.Gateway, pageID string, memo *domain.Memo) error {
-	blocks, err := memo.Blocks()
-	if err != nil {
-		return err
-	}
+	blocks := markdown.Parse(memo.Body)
 	attachmentIDs := []string{}
 	for _, b := range blocks {
 		if (b.Type == domain.BlockImage || b.Type == domain.BlockFile) && b.AttachmentID != "" {

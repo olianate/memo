@@ -8,15 +8,23 @@ import (
 	"github.com/olianate/memo/internal/domain"
 )
 
-// CreateAttachment inserts attachment metadata. Bytes are written by the
-// attachment service; this row is the durable record.
-func (s *Store) CreateAttachment(ctx context.Context, a domain.Attachment) (*domain.Attachment, error) {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO attachments
+type attachmentExecer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func insertAttachment(ctx context.Context, db attachmentExecer, a domain.Attachment) error {
+	_, err := db.ExecContext(ctx, `INSERT INTO attachments
 		(id, memo_id, kind, original_name, local_path, thumb_path, mime, bytes, width, height, sha256)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.MemoID, string(a.Kind), a.OriginalName, a.LocalPath, a.ThumbPath, a.MIME,
 		a.Bytes, a.Width, a.Height, a.SHA256)
-	if err != nil {
+	return err
+}
+
+// CreateAttachment inserts attachment metadata. Bytes are written by the
+// attachment service; this row is the durable record.
+func (s *Store) CreateAttachment(ctx context.Context, a domain.Attachment) (*domain.Attachment, error) {
+	if err := insertAttachment(ctx, s.db, a); err != nil {
 		return nil, err
 	}
 	return s.GetAttachment(ctx, a.ID)
@@ -62,12 +70,6 @@ func (s *Store) UpdateAttachmentPaths(ctx context.Context, id, localPath, thumbP
 func (s *Store) MarkAttachmentUploaded(ctx context.Context, id, fileID, blockID string, at time.Time) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE attachments SET notion_file_id=?, notion_block_id=?, uploaded_at=? WHERE id=?`,
 		fileID, blockID, toMS(at), id)
-	return err
-}
-
-// MarkAttachmentEvicted removes local paths and stamps eviction metadata.
-func (s *Store) MarkAttachmentEvicted(ctx context.Context, id string, at time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE attachments SET local_path='', thumb_path='', evicted_at=? WHERE id=?`, toMS(at), id)
 	return err
 }
 

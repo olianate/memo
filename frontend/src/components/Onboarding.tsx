@@ -6,7 +6,7 @@ import type {
   ParentPage,
   Workspace,
 } from "../types";
-import type { Backend } from "../backend";
+import type { OnboardingBackend } from "../backend";
 import { reportError } from "../lib/errorLog";
 import { CheckIcon, SearchIcon } from "./Icons";
 
@@ -22,7 +22,7 @@ export function Onboarding({
   onSkip,
   connectOnly = false,
 }: {
-  backend: Backend;
+  backend: OnboardingBackend;
   onDone: () => void;
   onSkip: () => void;
   connectOnly?: boolean;

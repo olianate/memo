@@ -2,9 +2,11 @@ package sync
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/olianate/memo/internal/domain"
 	"github.com/olianate/memo/internal/notion"
 	"github.com/olianate/memo/internal/notion/fake"
+	"github.com/olianate/memo/internal/presence"
 	"github.com/olianate/memo/internal/store"
 )
 
@@ -105,17 +108,14 @@ func newEnv(t *testing.T, device string, shared *fake.Gateway) *env {
 	svc.SetGateway(fw)
 	svc.SetDeviceID(device)
 	svc.SetClock(func() time.Time { return now })
+	svc.SetPresence(presence.New(st, imp, svc.Hydrate, func() time.Time { return now }, nil))
 	return &env{store: st, cfg: cfg, fake: fw, svc: svc, imp: imp, device: device, now: &now}
-}
-
-func block(text string) []domain.Block {
-	return []domain.Block{{ID: domain.NewID(), Type: domain.BlockParagraph, Spans: []domain.Span{{Text: text}}}}
 }
 
 func TestPushCreateAdoptsPageAndClearsOutbox(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, "dev-a", nil)
-	memo, err := e.store.CreateMemo(ctx, store.MemoInput{Blocks: block("hello archive"), Tags: []string{"work"}})
+	memo, err := e.store.CreateMemo(ctx, store.MemoInput{Body: "hello archive", Tags: []string{"work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestPullRejectsUnsafeMemoID(t *testing.T) {
 func TestPushUpdateReplacesBodyAndBumpsRevision(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, "dev-a", nil)
-	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Blocks: block("one")})
+	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Body: "one"})
 	if _, err := e.svc.PushOnce(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestPushUpdateReplacesBodyAndBumpsRevision(t *testing.T) {
 		m, _ := e.store.GetMemo(ctx, memo.ID)
 		return m.NotionPageID
 	}()
-	if _, err := e.store.UpdateMemo(ctx, memo.ID, block("two updated"), []string{"tag"}, nil); err != nil {
+	if _, err := e.store.UpdateMemo(ctx, memo.ID, "two updated", []string{"tag"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.svc.PushOnce(ctx); err != nil {
@@ -214,12 +214,11 @@ func TestPushUpdateReplacesBodyAndBumpsRevision(t *testing.T) {
 func TestPushBatchesLongBody(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, "dev-a", nil)
-	blocks := make([]domain.Block, 150)
-	for i := range blocks {
-		blocks[i] = domain.Block{ID: domain.NewID(), Type: domain.BlockParagraph,
-			Spans: []domain.Span{{Text: fmt.Sprintf("paragraph %d", i)}}}
+	paragraphs := make([]string, 150)
+	for i := range paragraphs {
+		paragraphs[i] = fmt.Sprintf("paragraph %d", i)
 	}
-	memo, err := e.store.CreateMemo(ctx, store.MemoInput{Blocks: blocks})
+	memo, err := e.store.CreateMemo(ctx, store.MemoInput{Body: strings.Join(paragraphs, "\n\n")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +237,7 @@ func TestPushBatchesLongBody(t *testing.T) {
 func TestTagOnlyChangePushesPropertiesWithoutReplacingBody(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, "dev-a", nil)
-	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Blocks: block("tagged body"), Tags: []string{"work"}})
+	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Body: "tagged body", Tags: []string{"work"}})
 	if _, err := e.svc.PushOnce(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +270,7 @@ func TestTagOnlyChangePushesPropertiesWithoutReplacingBody(t *testing.T) {
 func TestPushDeleteWritesTombstone(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, "dev-a", nil)
-	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Blocks: block("delete me")})
+	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Body: "delete me"})
 	if _, err := e.svc.PushOnce(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +340,7 @@ func TestPushFlushesPurgedPageTombstone(t *testing.T) {
 func TestPushRetriesThenSucceedsWithoutDuplicate(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, "dev-a", nil)
-	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Blocks: block("retry")})
+	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Body: "retry"})
 	fail := true
 	e.fake.OnCall = func(method string) error {
 		if method == "CreatePage" && fail {
@@ -373,7 +372,7 @@ func TestPushRetriesThenSucceedsWithoutDuplicate(t *testing.T) {
 func TestPush503CommitAdoptsPage(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, "dev-a", nil)
-	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Blocks: block("commit")})
+	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Body: "commit"})
 	e.fake.OnCall = func(method string) error {
 		if method == "CreatePage" {
 			return &notion.APIError{Status: 503, Code: "service_unavailable", CommittedResourceID: "page-99"}
@@ -490,7 +489,7 @@ func TestPullAppliesHigherRevisionAndDeletion(t *testing.T) {
 	}
 	e.fake.SeedPage(notion.Page{ID: pageID, CreatedTime: now.Add(-time.Hour), LastEditedTime: now, Properties: props},
 		[]notion.Block{{Object: "block", Type: "paragraph", Paragraph: &notion.TextBlock{RichText: []notion.RichText{{Type: "text", PlainText: "remote body"}}}}})
-	local, _ := e.store.CreateMemo(ctx, store.MemoInput{ID: "memo-1", Blocks: block("local body")})
+	local, _ := e.store.CreateMemo(ctx, store.MemoInput{ID: "memo-1", Body: "local body"})
 	_ = e.store.MarkSynced(ctx, local.ID, pageID, 1, now.Add(-2*time.Hour))
 	_ = e.store.ClearOutbox(ctx, local.ID)
 	_ = e.store.SetLastPull(ctx, now.Add(-time.Hour))
@@ -521,7 +520,115 @@ func TestPullAppliesHigherRevisionAndDeletion(t *testing.T) {
 	}
 }
 
+func TestPullKeepsNewerLocalEdit(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, "dev-b", nil)
+	now := time.Now().UTC()
+	pageID := "page-local-newer"
+	props := map[string]notion.PropertyValue{
+		"名称":                {Type: "title", Title: []notion.RichText{{PlainText: "x"}}},
+		notion.PropMemoID:   {Type: "rich_text", RichText: []notion.RichText{{PlainText: "memo-local"}}},
+		notion.PropCreated:  {Type: "date", Date: &notion.DateValue{Start: now.Add(-2 * time.Hour).Format(time.RFC3339)}},
+		notion.PropUpdated:  {Type: "date", Date: &notion.DateValue{Start: now.Add(-time.Hour).Format(time.RFC3339)}},
+		notion.PropRevision: {Type: "number", Number: float64Ptr(2)},
+		notion.PropDevice:   {Type: "rich_text", RichText: []notion.RichText{{PlainText: "dev-a"}}},
+		notion.PropStatus:   {Type: "select", Select: &notion.Option{Name: notion.StatusActive}},
+	}
+	e.fake.SeedPage(notion.Page{ID: pageID, CreatedTime: now.Add(-2 * time.Hour), LastEditedTime: now.Add(-time.Hour), Properties: props},
+		[]notion.Block{{Object: "block", Type: "paragraph", Paragraph: &notion.TextBlock{RichText: []notion.RichText{{Type: "text", PlainText: "older remote"}}}}})
+	local, _ := e.store.CreateMemo(ctx, store.MemoInput{ID: "memo-local", Body: "draft"})
+	_, _ = e.store.UpdateMemo(ctx, local.ID, "still draft", nil, nil)
+	_, _ = e.store.UpdateMemo(ctx, local.ID, "newer local edit", nil, nil)
+	_ = e.store.MarkSynced(ctx, local.ID, pageID, 3, now)
+	_ = e.store.ClearOutbox(ctx, local.ID)
+	_ = e.store.SetLastPull(ctx, now.Add(-2*time.Hour))
+
+	if err := e.svc.PullOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := e.store.GetMemo(ctx, "memo-local")
+	if got.Body != "newer local edit" || got.Revision != 3 {
+		t.Fatalf("older remote overwrote the local edit: %+v", got)
+	}
+}
+
 func float64Ptr(v float64) *float64 { return &v }
+
+func TestPullKeepsUnsupportedBlocksAsMarkdown(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, "dev-b", nil)
+	now := time.Now().UTC()
+	pageID := "page-unsupported"
+	props := map[string]notion.PropertyValue{
+		"名称":                {Type: "title", Title: []notion.RichText{{PlainText: "x"}}},
+		notion.PropMemoID:   {Type: "rich_text", RichText: []notion.RichText{{PlainText: "memo-unsupported"}}},
+		notion.PropCreated:  {Type: "date", Date: &notion.DateValue{Start: now.Add(-time.Hour).Format(time.RFC3339)}},
+		notion.PropUpdated:  {Type: "date", Date: &notion.DateValue{Start: now.Format(time.RFC3339)}},
+		notion.PropRevision: {Type: "number", Number: float64Ptr(1)},
+		notion.PropDevice:   {Type: "rich_text", RichText: []notion.RichText{{PlainText: "dev-a"}}},
+		notion.PropStatus:   {Type: "select", Select: &notion.Option{Name: notion.StatusActive}},
+	}
+	blocks := []notion.Block{
+		{Object: "block", Type: "paragraph", Paragraph: &notion.TextBlock{RichText: []notion.RichText{{Type: "text", PlainText: "remote body"}}}},
+		{Object: "block", Type: "callout", Raw: json.RawMessage(`{"object":"block","type":"callout","callout":{"rich_text":[{"type":"text","plain_text":"note"}]}}`)},
+		{Object: "block", Type: "column_list", HasChildren: true, Raw: json.RawMessage(`{"object":"block","type":"column_list","has_children":true,"column_list":{}}`)},
+	}
+	e.fake.SeedPage(notion.Page{ID: pageID, CreatedTime: now.Add(-time.Hour), LastEditedTime: now, Properties: props}, blocks)
+	_ = e.store.SetLastPull(ctx, now.Add(-time.Hour))
+
+	if err := e.svc.PullOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.store.GetMemo(ctx, "memo-unsupported")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got.Body, "remote body") || !strings.Contains(got.Body, "note") {
+		t.Fatalf("body lost textual blocks: %q", got.Body)
+	}
+	if !strings.Contains(got.Body, "```notion") || !strings.Contains(got.Body, `"column_list"`) {
+		t.Fatalf("body lost the unrepresentable block: %q", got.Body)
+	}
+}
+
+func TestPullExpandsNestedBlocks(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, "dev-b", nil)
+	now := time.Now().UTC()
+	pageID := "page-nested"
+	props := map[string]notion.PropertyValue{
+		"名称":                {Type: "title", Title: []notion.RichText{{PlainText: "x"}}},
+		notion.PropMemoID:   {Type: "rich_text", RichText: []notion.RichText{{PlainText: "memo-nested"}}},
+		notion.PropCreated:  {Type: "date", Date: &notion.DateValue{Start: now.Add(-time.Hour).Format(time.RFC3339)}},
+		notion.PropUpdated:  {Type: "date", Date: &notion.DateValue{Start: now.Format(time.RFC3339)}},
+		notion.PropRevision: {Type: "number", Number: float64Ptr(1)},
+		notion.PropDevice:   {Type: "rich_text", RichText: []notion.RichText{{PlainText: "dev-a"}}},
+		notion.PropStatus:   {Type: "select", Select: &notion.Option{Name: notion.StatusActive}},
+	}
+	e.fake.SeedPage(notion.Page{ID: pageID, CreatedTime: now.Add(-time.Hour), LastEditedTime: now, Properties: props}, []notion.Block{
+		{Object: "block", Type: "toggle", HasChildren: true, Raw: json.RawMessage(`{"object":"block","type":"toggle","toggle":{"rich_text":[{"type":"text","plain_text":"summary"}]}}`)},
+	})
+	parent := e.fake.Children[pageID][0]
+	if _, err := e.fake.AppendChildren(ctx, parent.ID, []notion.Block{{
+		Object:    "block",
+		Type:      "paragraph",
+		Paragraph: &notion.TextBlock{RichText: []notion.RichText{{Type: "text", PlainText: "nested child"}}},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	_ = e.store.SetLastPull(ctx, now.Add(-time.Hour))
+
+	if err := e.svc.PullOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.store.GetMemo(ctx, "memo-nested")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got.Body, "summary") || !strings.Contains(got.Body, "nested child") {
+		t.Fatalf("nested block lost on pull: %q", got.Body)
+	}
+}
 
 func TestTwoDevicesConvergeWithoutDuplicates(t *testing.T) {
 	ctx := context.Background()
@@ -529,7 +636,7 @@ func TestTwoDevicesConvergeWithoutDuplicates(t *testing.T) {
 	a := newEnv(t, "dev-a", shared)
 	b := newEnv(t, "dev-b", shared)
 
-	memo, _ := a.store.CreateMemo(ctx, store.MemoInput{Blocks: block("from device a"), Tags: []string{"shared"}})
+	memo, _ := a.store.CreateMemo(ctx, store.MemoInput{Body: "from device a", Tags: []string{"shared"}})
 	if _, err := a.svc.PushOnce(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -541,11 +648,11 @@ func TestTwoDevicesConvergeWithoutDuplicates(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := b.store.GetMemo(ctx, memo.ID)
-	if err != nil || got.BodyText != "from device a" {
+	if err != nil || got.Body != "from device a" || got.BodyText != "from device a" {
 		t.Fatalf("B did not pull: %+v %v", got, err)
 	}
 
-	if _, err := b.store.UpdateMemo(ctx, memo.ID, block("edited on b"), []string{"shared"}, nil); err != nil {
+	if _, err := b.store.UpdateMemo(ctx, memo.ID, "edited on b", []string{"shared"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := b.svc.PushOnce(ctx); err != nil {
@@ -559,7 +666,7 @@ func TestTwoDevicesConvergeWithoutDuplicates(t *testing.T) {
 		t.Fatal(err)
 	}
 	gotA, _ := a.store.GetMemo(ctx, memo.ID)
-	if gotA.Revision != 2 || gotA.BodyText != "edited on b" {
+	if gotA.Revision != 2 || gotA.Body != "edited on b" || gotA.BodyText != "edited on b" {
 		t.Fatalf("A did not converge: %+v", gotA)
 	}
 
@@ -584,10 +691,10 @@ func TestTwoDevicesConvergeWithoutDuplicates(t *testing.T) {
 func TestPullDoesNotWriteBodyIntoEvictedMemo(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, "dev-a", nil)
-	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Blocks: block("local body")})
+	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Body: "local body"})
 	_ = e.store.MarkSynced(ctx, memo.ID, "page-ev", 1, time.Now().Add(-time.Hour))
 	_ = e.store.ClearOutbox(ctx, memo.ID)
-	_ = e.store.SetEvicted(ctx, memo.ID)
+	_ = e.store.EvictBody(ctx, memo.ID, *e.now)
 	now := time.Now().UTC()
 	url := "https://signed.example/evicted.png"
 	e.fake.Downloads[url] = []byte("bytes")
@@ -610,7 +717,7 @@ func TestPullDoesNotWriteBodyIntoEvictedMemo(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := e.store.GetMemo(ctx, memo.ID)
-	if got.LocalState != domain.LocalEvicted || got.BodyJSON != "[]" {
+	if got.LocalState != domain.LocalEvicted || got.Body != "" {
 		t.Fatalf("evicted memo gained a body: %+v", got)
 	}
 	if got.Revision != 3 {
@@ -668,7 +775,7 @@ func TestEligibleForEviction(t *testing.T) {
 func TestEvictionKeepsTextAndHydrationRestoresBody(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, "dev-a", nil)
-	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Blocks: block("evict and hydrate")})
+	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Body: "evict and hydrate"})
 	if _, err := e.svc.PushOnce(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -685,7 +792,7 @@ func TestEvictionKeepsTextAndHydrationRestoresBody(t *testing.T) {
 		t.Fatal(err)
 	}
 	evicted, _ := e.store.GetMemo(ctx, memo.ID)
-	if evicted.LocalState != domain.LocalEvicted || evicted.BodyJSON != "[]" {
+	if evicted.LocalState != domain.LocalEvicted || evicted.Body != "" {
 		t.Fatalf("evicted = %+v", evicted)
 	}
 	if evicted.BodyText != "evict and hydrate" {
@@ -740,7 +847,7 @@ func TestHydrateImportsAttachmentBytes(t *testing.T) {
 func TestHydrationRestoresEvictedAttachmentBytes(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, "dev-a", nil)
-	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Blocks: block("with image")})
+	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Body: "with image"})
 	path := filepath.Join(t.TempDir(), "a.png")
 	if err := os.WriteFile(path, []byte("image-bytes"), 0o644); err != nil {
 		t.Fatal(err)
@@ -752,10 +859,7 @@ func TestHydrationRestoresEvictedAttachmentBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := []domain.Block{
-		{ID: domain.NewID(), Type: domain.BlockParagraph, Spans: []domain.Span{{Text: "with image"}}},
-		{ID: domain.NewID(), Type: domain.BlockImage, AttachmentID: att.ID, Alt: "a.png"},
-	}
+	body := "with image\n\n![a.png](attachment://" + att.ID + ")"
 	if _, err := e.store.UpdateMemo(ctx, memo.ID, body, nil, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -767,9 +871,8 @@ func TestHydrationRestoresEvictedAttachmentBytes(t *testing.T) {
 		t.Fatalf("push did not wire attachment: %+v", synced.Attachments)
 	}
 	_ = e.store.MarkSynced(ctx, memo.ID, synced.NotionPageID, synced.Revision, (*e.now).Add(-31*24*time.Hour))
-	_ = e.store.MarkAttachmentEvicted(ctx, att.ID, *e.now)
 	_ = os.Remove(path)
-	_ = e.store.SetEvicted(ctx, memo.ID)
+	_ = e.store.EvictBody(ctx, memo.ID, *e.now)
 
 	if err := e.svc.Hydrate(ctx, memo.ID); err != nil {
 		t.Fatal(err)
@@ -784,22 +887,21 @@ func TestHydrationRestoresEvictedAttachmentBytes(t *testing.T) {
 	if _, err := os.Stat(got.Attachments[0].LocalPath); err != nil {
 		t.Fatalf("attachment bytes missing: %v", err)
 	}
-	blocks, _ := got.Blocks()
-	if len(blocks) != 2 || blocks[1].AttachmentID != got.Attachments[0].ID {
-		t.Fatalf("blocks = %+v", blocks)
+	if !strings.Contains(got.Body, "attachment://"+got.Attachments[0].ID) {
+		t.Fatalf("body = %q", got.Body)
 	}
 }
 
 func TestRestoreAllReportsProgress(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, "dev-a", nil)
-	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Blocks: block("restore me")})
+	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Body: "restore me"})
 	if _, err := e.svc.PushOnce(ctx); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := e.store.GetMemo(ctx, memo.ID)
 	_ = e.store.MarkSynced(ctx, memo.ID, got.NotionPageID, got.Revision, e.now.Add(-31*24*time.Hour))
-	_ = e.store.SetEvicted(ctx, memo.ID)
+	_ = e.store.EvictBody(ctx, memo.ID, *e.now)
 	progress, err := e.svc.RestoreAll(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -810,5 +912,35 @@ func TestRestoreAllReportsProgress(t *testing.T) {
 	restored, _ := e.store.GetMemo(ctx, memo.ID)
 	if restored.LocalState != domain.LocalPresent {
 		t.Fatalf("state = %q", restored.LocalState)
+	}
+}
+func TestPushKeepsUnsupportedMarkdownAndRestoresNotionFence(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, "dev-a", nil)
+	callout := `{"type":"callout","callout":{"rich_text":[{"type":"text","text":{"content":"note"}}]}}`
+	body := "| a | b |\n| - | - |\n\n```notion\n" + callout + "\n```\n\n```notion\nnot json\n```"
+	memo, err := e.store.CreateMemo(ctx, store.MemoInput{Body: body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.PushOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := e.store.GetMemo(ctx, memo.ID)
+	children := e.fake.Children[got.NotionPageID]
+	if len(children) != 4 {
+		t.Fatalf("children = %+v", children)
+	}
+	if children[0].Type != "paragraph" || children[0].Paragraph.RichText[0].Text.Content != "| a | b |" {
+		t.Errorf("table line was not kept literal: %+v", children[0])
+	}
+	if children[1].Type != "paragraph" || children[1].Paragraph.RichText[0].Text.Content != "| - | - |" {
+		t.Errorf("table separator was not kept literal: %+v", children[1])
+	}
+	if children[2].Type != "callout" {
+		t.Errorf("notion fence restored to %q, want callout", children[2].Type)
+	}
+	if children[3].Type != "code" || children[3].Code == nil || children[3].Code.Language != "plain text" {
+		t.Errorf("bad notion fence did not fall back to literal code: %+v", children[3])
 	}
 }

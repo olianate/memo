@@ -28,49 +28,39 @@ func (s *Store) ApplyRemoteDelete(ctx context.Context, id string, updatedAt time
 
 // HydrateMemo restores a body fetched from Notion without changing the memo's
 // revision or timestamps. The retention clock resets via last_hydrated_at.
-func (s *Store) HydrateMemo(ctx context.Context, id string, blocks []domain.Block, at time.Time) error {
-	bodyJSON, err := domain.MarshalBlocks(blocks)
-	if err != nil {
-		return err
-	}
-	bodyText := domain.Text(blocks)
-	hash := domain.HashContent(blocks, nil)
+func (s *Store) HydrateMemo(ctx context.Context, id string, body string, at time.Time) error {
+	derived := deriveBody(body, nil)
 	return withTx(ctx, s.db, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `UPDATE memos SET body_json=?, body_text=?, snippet=?, content_hash=?,
+		if _, err := tx.ExecContext(ctx, `UPDATE memos SET body_md=?, body_text=?, snippet=?, content_hash=?,
 			block_stats=?, local_state=?, last_hydrated_at=? WHERE id=?`,
-			bodyJSON, bodyText, domain.Snippet(bodyText, 200), hash,
-			domain.MarshalBlockStats(domain.AnalyzeBlocks(blocks)), string(domain.LocalPresent), toMS(at), id); err != nil {
+			body, derived.Text, derived.Snippet, derived.Hash,
+			domain.MarshalBlockStats(derived.Stats), string(domain.LocalPresent), toMS(at), id); err != nil {
 			return err
 		}
 		tags, err := tagNamesTx(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		return indexMemo(ctx, tx, id, bodyText, tags)
+		return indexMemo(ctx, tx, id, derived.Text, tags)
 	})
 }
 
-// UpdateBlocks rewrites a memo's body after a pull without changing its
+// UpdateBody rewrites a memo's body after a pull without changing its
 // revision, timestamps, local state or retention clock.
-func (s *Store) UpdateBlocks(ctx context.Context, id string, blocks []domain.Block) error {
-	bodyJSON, err := domain.MarshalBlocks(blocks)
-	if err != nil {
-		return err
-	}
-	bodyText := domain.Text(blocks)
-	hash := domain.HashContent(blocks, nil)
+func (s *Store) UpdateBody(ctx context.Context, id string, body string) error {
+	derived := deriveBody(body, nil)
 	return withTx(ctx, s.db, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `UPDATE memos SET body_json=?, body_text=?, snippet=?, content_hash=?,
+		if _, err := tx.ExecContext(ctx, `UPDATE memos SET body_md=?, body_text=?, snippet=?, content_hash=?,
 			block_stats=? WHERE id=?`,
-			bodyJSON, bodyText, domain.Snippet(bodyText, 200), hash,
-			domain.MarshalBlockStats(domain.AnalyzeBlocks(blocks)), id); err != nil {
+			body, derived.Text, derived.Snippet, derived.Hash,
+			domain.MarshalBlockStats(derived.Stats), id); err != nil {
 			return err
 		}
 		tags, err := tagNamesTx(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		return indexMemo(ctx, tx, id, bodyText, tags)
+		return indexMemo(ctx, tx, id, derived.Text, tags)
 	})
 }
 

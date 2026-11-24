@@ -19,7 +19,8 @@ const (
 	LocalEvicted LocalState = "evicted"
 )
 
-// BlockType is the canonical block discriminator in body_json.
+// BlockType is the block discriminator used by the Notion adapter. Blocks are
+// a transient projection of Markdown, never the stored body.
 type BlockType string
 
 const (
@@ -46,8 +47,8 @@ type Span struct {
 	Link   string `json:"link,omitempty"`
 }
 
-// Block is one element of the canonical memo body. Markdown is a projection of
-// this AST, not a second source of truth.
+// Block is one element of the Markdown projection. The Notion mapper produces
+// and consumes blocks; the store and editor do not.
 type Block struct {
 	ID           string    `json:"id"`
 	Type         BlockType `json:"type"`
@@ -97,42 +98,16 @@ func Snippet(text string, limit int) string {
 }
 
 // HashContent is the per-memo content hash written to Notion-adjacent state and
-// used to skip no-op pushes. Tags are part of the content.
-func HashContent(blocks []Block, tags []string) string {
+// used to skip no-op pushes. Tags are part of the content, and the body is
+// hashed byte for byte.
+func HashContent(body string, tags []string) string {
 	payload := struct {
-		Blocks []Block  `json:"blocks"`
-		Tags   []string `json:"tags"`
-	}{Blocks: blocks, Tags: sortedUnique(tags)}
+		Body string   `json:"body"`
+		Tags []string `json:"tags"`
+	}{Body: body, Tags: sortedUnique(tags)}
 	data, _ := json.Marshal(payload)
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
-}
-
-// MarshalBlocks serializes the block AST for storage.
-func MarshalBlocks(blocks []Block) (string, error) {
-	if blocks == nil {
-		blocks = []Block{}
-	}
-	data, err := json.Marshal(blocks)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-// UnmarshalBlocks parses body_json. A missing body is an empty body.
-func UnmarshalBlocks(raw string) ([]Block, error) {
-	if strings.TrimSpace(raw) == "" {
-		return []Block{}, nil
-	}
-	var blocks []Block
-	if err := json.Unmarshal([]byte(raw), &blocks); err != nil {
-		return nil, err
-	}
-	if blocks == nil {
-		return []Block{}, nil
-	}
-	return blocks, nil
 }
 
 var ErrNotFound = errors.New("not found")
@@ -166,7 +141,7 @@ type Memo struct {
 	CreatedAt      time.Time    `json:"created_at"`
 	UpdatedAt      time.Time    `json:"updated_at"`
 	Revision       int64        `json:"revision"`
-	BodyJSON       string       `json:"-"`
+	Body           string       `json:"body"`
 	BodyText       string       `json:"-"`
 	Snippet        string       `json:"snippet"`
 	DeletedAt      *time.Time   `json:"deleted_at,omitempty"`
@@ -182,9 +157,6 @@ type Memo struct {
 	Tags           []Tag        `json:"tags"`
 	Attachments    []Attachment `json:"attachments"`
 }
-
-// Blocks unmarshals the memo body.
-func (m Memo) Blocks() ([]Block, error) { return UnmarshalBlocks(m.BodyJSON) }
 
 // AttachmentKind separates image rendering from file chips.
 type AttachmentKind string

@@ -14,6 +14,12 @@ Bundled source:
   Inter typeface — SIL Open Font License 1.1.
   See frontend/Inter Font License.txt.
 
+  Atomic Editor (https://github.com/kenforthewin/atomic-editor) — MIT.
+  Copyright (c) 2026 Kenny Bergquist.
+
+  CodeMirror (https://codemirror.net) — MIT.
+  Copyright (C) 2018-2021 by Marijn Haverbeke and others.
+
 Linked libraries and build dependencies (permissive licenses, mostly MIT/BSD/
 ISC/Apache-2.0) are listed with their versions in go.mod and
 frontend/package.json. Release binaries are built from this repository by

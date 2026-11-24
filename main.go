@@ -21,7 +21,9 @@ import (
 	"github.com/olianate/memo/internal/config"
 	"github.com/olianate/memo/internal/domain"
 	"github.com/olianate/memo/internal/mcpserver"
+	"github.com/olianate/memo/internal/memoedit"
 	"github.com/olianate/memo/internal/platform"
+	"github.com/olianate/memo/internal/presence"
 	"github.com/olianate/memo/internal/search"
 	"github.com/olianate/memo/internal/services"
 	"github.com/olianate/memo/internal/stats"
@@ -74,11 +76,16 @@ func main() {
 	}
 
 	hooks := &appHooks{cfg: cfg}
-	memoSvc := services.NewMemoService(st, syncSvc, attachmentsSvc, emit)
+	keeper := presence.New(st, attachmentsSvc, syncSvc.Hydrate, time.Now, emit)
+	syncSvc.SetPresence(keeper)
+	editor := memoedit.New(st, attachmentsSvc, keeper, func(id string) {
+		emit("memos:changed", map[string]string{"id": id})
+	})
+	memoSvc := services.NewMemoService(st, attachmentsSvc, emit, editor, keeper)
 	tagSvc := services.NewTagService(st, emit)
 	searchBoundary := services.NewSearchService(searchSvc)
 	statsBoundary := services.NewStatsService(statsSvc)
-	mcpSvc := mcpserver.New(memoSvc, searchBoundary)
+	mcpSvc := mcpserver.New(memoSvc, editor, searchBoundary)
 	settingsSvc := services.NewSettingsService(st, cfg, dataDir, hooks, keychain)
 	syncBoundary := services.NewSyncService(syncSvc, cfg, st, keychain, emit)
 	platformSvc := services.NewPlatformService(hooks, cfg)

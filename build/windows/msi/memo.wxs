@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Per-user MSI for memo. Built with WiX Toolset 3.14 in CI:
-    candle.exe -arch x64 -dVersion=1.2.0 -dSourceDir=... -dIconPath=... memo.wxs
+    candle.exe -arch x64 -dVersion=1.3.0 -dSourceDir=... -dIconPath=... memo.wxs
     light.exe -ext WixUIExtension memo.wixobj -out memo-windows-amd64.msi
 
   The package installs into %LOCALAPPDATA%\Programs\memo, so it needs no admin

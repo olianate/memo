@@ -4,7 +4,6 @@ package services
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/olianate/memo/internal/domain"
@@ -26,10 +25,18 @@ type MemoDTO struct {
 	NotionSyncedAt string          `json:"notion_synced_at,omitempty"`
 	LastHydratedAt string          `json:"last_hydrated_at,omitempty"`
 	SyncError      string          `json:"sync_error,omitempty"`
-	Blocks         []domain.Block  `json:"blocks"`
+	Body           string          `json:"body"`
 	Tags           []TagDTO        `json:"tags"`
 	Attachments    []AttachmentDTO `json:"attachments"`
 	Day            string          `json:"day"`
+}
+
+// AttachmentPayload is one file crossing the webview boundary. Data is base64
+// so a batch of files travels through a single call.
+type AttachmentPayload struct {
+	Name string `json:"name"`
+	MIME string `json:"mime"`
+	Data string `json:"data"`
 }
 
 // TagDTO is one tag with its active-memo count.
@@ -83,7 +90,7 @@ type SearchResultDTO struct {
 	After  string  `json:"after"`
 }
 
-func toMemoDTO(m domain.Memo, blocks []domain.Block) MemoDTO {
+func toMemoDTO(m domain.Memo) MemoDTO {
 	dto := MemoDTO{
 		ID:           m.ID,
 		CreatedAt:    m.CreatedAt.Local().Format(time.RFC3339),
@@ -95,7 +102,7 @@ func toMemoDTO(m domain.Memo, blocks []domain.Block) MemoDTO {
 		LocalState:   string(m.LocalState),
 		NotionPageID: m.NotionPageID,
 		SyncError:    m.SyncError,
-		Blocks:       blocks,
+		Body:         m.Body,
 		Tags:         []TagDTO{},
 		Attachments:  []AttachmentDTO{},
 		Day:          m.CreatedAt.Local().Format("2006-01-02"),
@@ -145,25 +152,6 @@ func toMemoFilter(f FilterDTO) store.MemoFilter {
 	}
 	if t, err := time.Parse(time.RFC3339, f.To); err == nil {
 		out.To = &t
-	}
-	return out
-}
-
-func parseBlocks(m domain.Memo) []domain.Block {
-	blocks, err := m.Blocks()
-	if err != nil {
-		return []domain.Block{}
-	}
-	return blocks
-}
-
-func cleanTags(tags []string) []string {
-	out := make([]string, 0, len(tags))
-	for _, t := range tags {
-		t = domain.CleanTagName(t)
-		if t != "" && !strings.Contains(t, " ") {
-			out = append(out, t)
-		}
 	}
 	return out
 }

@@ -24,7 +24,15 @@ export function spansToHtml(spans: Span[] | null | undefined): string {
   return (spans ?? []).map(spanToHtml).join("");
 }
 
-function pushSpan(out: Span[], text: string, marks: Omit<Span, "text">) {
+interface InlineStyle {
+  bold?: boolean;
+  italic?: boolean;
+  strike?: boolean;
+  code?: boolean;
+  link?: string;
+}
+
+function pushSpan(out: Span[], text: string, marks: InlineStyle) {
   if (!text) return;
   const last = out[out.length - 1];
   if (
@@ -39,52 +47,6 @@ function pushSpan(out: Span[], text: string, marks: Omit<Span, "text">) {
     return;
   }
   out.push({ text, ...marks });
-}
-
-const BLOCK_TAGS = new Set(["DIV", "P", "LI", "H1", "H2", "H3", "BLOCKQUOTE"]);
-
-/** Converts edited contentEditable DOM into flat inline spans. */
-export function spansFromDOM(root: HTMLElement): Span[] {
-  const out: Span[] = [];
-  const walk = (node: Node, marks: Omit<Span, "text">) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      pushSpan(out, node.textContent ?? "", marks);
-      return;
-    }
-    if (!(node instanceof HTMLElement)) return;
-    const tag = node.tagName;
-    if (tag === "BR") {
-      pushSpan(out, "\n", marks);
-      return;
-    }
-    const next: Omit<Span, "text"> = { ...marks };
-    if (tag === "B" || tag === "STRONG" || node.style.fontWeight === "bold" || node.style.fontWeight === "700") next.bold = true;
-    if (tag === "I" || tag === "EM" || node.style.fontStyle === "italic") next.italic = true;
-    if (tag === "S" || tag === "DEL" || tag === "STRIKE" || node.style.textDecoration.includes("line-through")) next.strike = true;
-    if (tag === "CODE") next.code = true;
-    if (tag === "A") next.link = node.getAttribute("href") ?? undefined;
-    if (BLOCK_TAGS.has(tag) && out.length > 0 && !out[out.length - 1].text.endsWith("\n")) {
-      pushSpan(out, "\n", marks);
-    }
-    node.childNodes.forEach((child) => walk(child, next));
-  };
-  root.childNodes.forEach((child) => walk(child, {}));
-  // Trim a trailing newline introduced by a wrapped block.
-  while (out.length > 0) {
-    const last = out[out.length - 1];
-    last.text = last.text.replace(/\n$/, "");
-    if (last.text) break;
-    out.pop();
-  }
-  return out;
-}
-
-interface InlineStyle {
-  bold?: boolean;
-  italic?: boolean;
-  strike?: boolean;
-  code?: boolean;
-  link?: string;
 }
 
 /** Parses the supported inline Markdown subset, used when a block blurs. */
@@ -111,6 +73,22 @@ export function inlineMarkdownToSpans(source: string): Span[] {
           flush();
           parse(rest.slice(1, end), { ...style, code: true });
           i += end + 1;
+          continue;
+        }
+      }
+      if (rest[0] === "<") {
+        const auto = rest.match(/^<((?:https?:\/\/|mailto:)[^>\s]+)>/i);
+        if (auto) {
+          const url = auto[1].replace(/\\(.)/g, "$1");
+          flush();
+          pushSpan(out, url.replace(/^mailto:/i, ""), { ...style, link: url });
+          i += auto[0].length;
+          continue;
+        }
+        const br = rest.match(/^<br\s*\/?>/i);
+        if (br) {
+          buffer += " ";
+          i += br[0].length;
           continue;
         }
       }
@@ -262,6 +240,91 @@ export function blockText(block: Block): string {
   return (block.spans ?? []).map((s) => s.text).join("");
 }
 
+/** Builds a throwaway view projection for previews; never persisted. */
+export function blocksFromMarkdown(source: string): Block[] {
+  const out: Block[] = [];
+  const lines = source.replace(/\r\n/g, "\n").split("\n");
+  let n = 0;
+  const push = (type: Block["type"], text = "", extra: Partial<Block> = {}) => {
+    out.push({ id: `md-${n++}`, type, spans: text ? inlineMarkdownToSpans(text) : [], ...extra });
+  };
+  const tableCells = (row: string) =>
+    row
+      .trim()
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split("|")
+      .map((cell) => cell.trim());
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const separatorNext = i + 1 < lines.length && /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(lines[i + 1].trim());
+    const singleRowTable = /^\|.*\|$/.test(line) && (i + 1 >= lines.length || !lines[i + 1].trim());
+    if (line.includes("|") && (separatorNext || singleRowTable)) {
+      const rows = [tableCells(line)];
+      i += separatorNext ? 2 : 1;
+      while (i < lines.length && lines[i].trim() && lines[i].includes("|")) {
+        rows.push(tableCells(lines[i]));
+        i++;
+      }
+      i--;
+      push("table", rows.flat().join(" "), { rows });
+      continue;
+    }
+    const fence = line.match(/^(`{3,}|~{3,})\s*(.*)$/);
+    if (fence) {
+      const marker = fence[1][0];
+      const language = fence[2].trim();
+      const closing = new RegExp(`^\\${marker}{${fence[1].length},}\\s*$`);
+      const code: string[] = [];
+      for (i++; i < lines.length && !closing.test(lines[i].trim()); i++) code.push(lines[i]);
+      push("code", code.join("\n"), { language });
+      continue;
+    }
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) {
+      push("divider");
+      continue;
+    }
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      push("heading", heading[2], { level: heading[1].length });
+      continue;
+    }
+    const todo = line.match(/^[-*+]\s+\[([ xX])\]\s+(.*)$/);
+    if (todo) {
+      push("todo", todo[2], { checked: todo[1].toLowerCase() === "x" });
+      continue;
+    }
+    const bullet = line.match(/^[-*+]\s+(.*)$/);
+    if (bullet) {
+      push("bullet", bullet[1]);
+      continue;
+    }
+    const ordered = line.match(/^\d+[.)]\s+(.*)$/);
+    if (ordered) {
+      push("ordered", ordered[1]);
+      continue;
+    }
+    const quote = line.match(/^>\s?(.*)$/);
+    if (quote) {
+      push("quote", quote[1]);
+      continue;
+    }
+    const image = line.match(/^!\[(.*)\]\(attachment:\/\/(.*)\)$/);
+    if (image) {
+      push("image", "", { alt: image[1], attachment_id: image[2] });
+      continue;
+    }
+    const file = line.match(/^\[(.*)\]\(attachment:\/\/(.*)\)$/);
+    if (file) {
+      push("file", "", { alt: file[1], attachment_id: file[2] });
+      continue;
+    }
+    push("paragraph", line);
+  }
+  return out;
+}
+
 /** Renders a memo body's text blocks for a timeline card or sheet preview. */
 export function BlockPreview({
   blocks,
@@ -319,6 +382,36 @@ export function BlockPreview({
                 <code>{blockText(block)}</code>
               </pre>
             );
+          case "table": {
+            const [head, ...rows] = block.rows ?? [];
+            if (!head) return null;
+            return (
+              <div key={block.id} className="md-table-wrap">
+                <table className="md-table">
+                  <thead>
+                    <tr>
+                      {head.map((cell, index) => (
+                        <th key={index}>
+                          <InlineSpans spans={inlineMarkdownToSpans(cell)} onOpenLink={onOpenLink} />
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, rowIndex) => (
+                      <tr key={rowIndex}>
+                        {row.map((cell, cellIndex) => (
+                          <td key={cellIndex}>
+                            <InlineSpans spans={inlineMarkdownToSpans(cell)} onOpenLink={onOpenLink} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          }
           default:
             return (
               <p key={block.id} className="md-paragraph">

@@ -1,6 +1,7 @@
 package notion
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -309,11 +310,78 @@ type ImportedAttachment struct {
 	URL     string
 }
 
-// BlocksToNotion maps the block AST to Notion blocks. Attachment blocks need an
-// uploaded file id; uploads maps attachment id -> file upload id.
+const notionFenceLanguage = "notion"
+
+// creatableRawTypes are Notion block types that can be sent back through the
+// append API. Read-only or container-only types stay as code fences instead.
+var creatableRawTypes = map[string]bool{
+	"paragraph":          true,
+	"heading_1":          true,
+	"heading_2":          true,
+	"heading_3":          true,
+	"bulleted_list_item": true,
+	"numbered_list_item": true,
+	"to_do":              true,
+	"quote":              true,
+	"code":               true,
+	"divider":            true,
+	"callout":            true,
+	"toggle":             true,
+	"embed":              true,
+	"bookmark":           true,
+	"equation":           true,
+}
+
+// restoreNotionFence rebuilds a block captured as raw JSON by the pull path.
+// Only appendable types without children are restored; everything else falls
+// back to a code block so the source is never lost.
+func restoreNotionFence(source string) (Block, bool) {
+	raw := strings.TrimSpace(source)
+	if raw == "" {
+		return Block{}, false
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return Block{}, false
+	}
+	var blockType string
+	if err := json.Unmarshal(payload["type"], &blockType); err != nil || !creatableRawTypes[blockType] {
+		return Block{}, false
+	}
+	body, ok := payload[blockType]
+	if !ok || len(body) == 0 {
+		return Block{}, false
+	}
+	var object map[string]any
+	if err := json.Unmarshal(body, &object); err != nil || object == nil {
+		return Block{}, false
+	}
+	if children, ok := payload["children"]; ok {
+		var list []json.RawMessage
+		if err := json.Unmarshal(children, &list); err != nil || len(list) > 0 {
+			return Block{}, false
+		}
+	}
+	typeJSON, _ := json.Marshal(blockType)
+	clean, err := json.Marshal(map[string]json.RawMessage{
+		"object":  json.RawMessage(`"block"`),
+		"type":    typeJSON,
+		blockType: body,
+	})
+	if err != nil {
+		return Block{}, false
+	}
+	return Block{Object: "block", Type: blockType, Raw: clean}, true
+}
 func BlocksToNotion(blocks []domain.Block, uploads map[string]string) ([]Block, error) {
 	out := make([]Block, 0, len(blocks))
 	for _, b := range blocks {
+		if b.Type == domain.BlockCode && strings.EqualFold(strings.TrimSpace(b.Language), notionFenceLanguage) {
+			if restored, ok := restoreNotionFence(b.PlainText()); ok {
+				out = append(out, restored)
+				continue
+			}
+		}
 		switch b.Type {
 		case domain.BlockParagraph:
 			out = append(out, Block{Object: "block", Type: "paragraph", Paragraph: &TextBlock{RichText: SpansToRichText(b.Spans)}})
@@ -369,8 +437,9 @@ func BlocksToNotion(blocks []domain.Block, uploads map[string]string) ([]Block, 
 }
 
 // BlocksFromNotion maps page children to the AST and reports attachments to
-// hydrate. Unsupported block types become paragraphs when they carry text, and
-// are skipped otherwise.
+// hydrate. Unsupported block types keep their text as a paragraph; blocks with
+// no Markdown form become a `notion` fenced code block holding the original
+// payload, so no block is ever dropped.
 func BlocksFromNotion(blocks []Block) ([]domain.Block, []ImportedAttachment) {
 	var out []domain.Block
 	var atts []ImportedAttachment
@@ -418,17 +487,20 @@ func BlocksFromNotion(blocks []Block) ([]domain.Block, []ImportedAttachment) {
 				kind = domain.AttachmentFile
 			}
 			if fb == nil {
+				out = append(out, unsupportedNotionBlockOnly(b))
 				continue
 			}
 			// External file objects are not app-created attachments. Never
 			// download them: a shared page could point at localhost or an
 			// internal service (SSRF). Our own writes always use Notion-hosted
-			// `file` objects.
+			// `file` objects. Keep the original block visible instead of
+			// dropping it.
 			url := ""
 			if fb.File != nil {
 				url = fb.File.URL
 			}
 			if url == "" {
+				out = append(out, unsupportedNotionBlockOnly(b))
 				continue
 			}
 			name := captionText(fb.Caption)
@@ -438,8 +510,12 @@ func BlocksFromNotion(blocks []Block) ([]domain.Block, []ImportedAttachment) {
 			}
 			out = append(out, block)
 			atts = append(atts, ImportedAttachment{BlockID: b.ID, Kind: kind, Name: name, URL: url})
+		default:
+			out = append(out, unsupportedNotionBlockOnly(b))
 		}
-		// Nested children are flattened after the parent.
+		// Nested children are flattened after the parent. Children come from
+		// separate list-children calls, not from the raw block payload, so even
+		// an unsupported block's children must be kept.
 		if len(b.Children) > 0 {
 			childBlocks, childAtts := BlocksFromNotion(b.Children)
 			out = append(out, childBlocks...)
@@ -475,8 +551,91 @@ func captionText(caption []RichText) string {
 	return sb.String()
 }
 
+func unsupportedNotionBlock(b Block) (domain.Block, bool) {
+	raw := b.Raw
+	if len(raw) == 0 {
+		raw, _ = json.Marshal(b)
+	}
+	body, blockType := rawBlockBody(b, raw)
+	if spans := unsupportedTextSpans(body); len(spans) > 0 {
+		return domain.Block{ID: domain.NewID(), Type: domain.BlockParagraph, Spans: spans}, false
+	}
+	payload := strings.TrimSpace(string(raw))
+	if payload == "" {
+		payload = fmt.Sprintf(`{"type":%q}`, blockType)
+	}
+	return domain.Block{
+		ID:       domain.NewID(),
+		Type:     domain.BlockCode,
+		Language: notionFenceLanguage,
+		Spans:    []domain.Span{{Text: payload}},
+	}, true
+}
+
+func unsupportedNotionBlockOnly(b Block) domain.Block {
+	block, _ := unsupportedNotionBlock(b)
+	return block
+}
+
+func rawBlockBody(b Block, raw json.RawMessage) (map[string]json.RawMessage, string) {
+	var outer map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &outer); err != nil {
+		return nil, b.Type
+	}
+	blockType := b.Type
+	if blockType == "" {
+		_ = json.Unmarshal(outer["type"], &blockType)
+	}
+	var body map[string]json.RawMessage
+	if payload, ok := outer[blockType]; ok {
+		_ = json.Unmarshal(payload, &body)
+	}
+	if body == nil {
+		body = outer
+	}
+	return body, blockType
+}
+
+// unsupportedTextSpans pulls whatever human-readable text an unknown Notion
+// block carries. Rich text keeps its inline marks; table cells, URLs, titles
+// and equations degrade to plain spans.
+func unsupportedTextSpans(body map[string]json.RawMessage) []domain.Span {
+	if rawText, ok := body["rich_text"]; ok {
+		var rich []RichText
+		if json.Unmarshal(rawText, &rich) == nil {
+			if spans := RichTextToSpans(rich); len(spans) > 0 {
+				return spans
+			}
+		}
+	}
+	if rawCells, ok := body["cells"]; ok {
+		var cells [][]RichText
+		if json.Unmarshal(rawCells, &cells) == nil {
+			parts := make([]string, 0, len(cells))
+			for _, cell := range cells {
+				parts = append(parts, captionText(cell))
+			}
+			if text := strings.TrimSpace(strings.Join(parts, " | ")); text != "" {
+				return []domain.Span{{Text: text}}
+			}
+		}
+	}
+	for _, key := range []string{"url", "title", "expression"} {
+		rawValue, ok := body[key]
+		if !ok {
+			continue
+		}
+		var text string
+		if json.Unmarshal(rawValue, &text) == nil && strings.TrimSpace(text) != "" {
+			return []domain.Span{{Text: text, Code: key == "expression"}}
+		}
+	}
+	return nil
+}
+
 func notionLanguage(lang string) string {
-	switch strings.ToLower(strings.TrimSpace(lang)) {
+	l := strings.ToLower(strings.TrimSpace(lang))
+	switch l {
 	case "", "text", "plain", "plain text":
 		return "plain text"
 	case "js":
@@ -489,7 +648,13 @@ func notionLanguage(lang string) string {
 		return "python"
 	case "yml":
 		return "yaml"
+	case "go", "rust", "java", "c", "c++", "cpp", "c#", "csharp", "json", "sql",
+		"html", "css", "xml", "markdown", "md", "ruby", "rb", "php", "swift",
+		"kotlin", "scala", "r", "lua", "dart", "elixir", "erlang", "haskell",
+		"clojure", "groovy", "perl", "powershell", "ps1", "toml", "diff",
+		"dockerfile", "graphql", "makefile", "latex", "tex":
+		return l
 	default:
-		return strings.ToLower(lang)
+		return "plain text"
 	}
 }

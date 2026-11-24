@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/domain/markdown"
 	"github.com/olianate/memo/internal/notion"
 	"github.com/olianate/memo/internal/store"
 )
@@ -193,7 +194,6 @@ func (s *Service) applyPage(ctx context.Context, g notion.Gateway, p notion.Page
 	rev := notion.RevisionFromPage(p)
 	updated := notion.UpdatedAtFromPage(p)
 	created := notion.CreatedAtFromPage(p)
-	wasEvicted := err == nil && local.LocalState == domain.LocalEvicted
 
 	if errors.Is(err, domain.ErrNotFound) {
 		if deleted {
@@ -203,20 +203,21 @@ func (s *Service) applyPage(ctx context.Context, g notion.Gateway, p notion.Page
 		if err != nil {
 			return err
 		}
-		if _, err := s.store.ApplyRemote(ctx, store.RemoteMemo{
+		_, applied, err := s.presence.MergeRemote(ctx, store.RemoteMemo{
 			ID: id, PageID: p.ID, CreatedAt: created, UpdatedAt: updated, Revision: rev,
-			Blocks: blocks, Tags: notion.TagsFromPage(p), SyncedAt: s.clock(),
-		}); err != nil {
+			Body: markdown.Serialize(blocks), Tags: notion.TagsFromPage(p), SyncedAt: s.clock(),
+		})
+		if err != nil {
 			return err
 		}
 		// The memo row must exist before attachment metadata can reference it.
-		if !wasEvicted {
+		if applied {
 			wired, err := s.importAttachments(ctx, g, id, blocks, atts)
 			if err != nil {
 				return err
 			}
 			if len(atts) > 0 {
-				if err := s.store.UpdateBlocks(ctx, id, wired); err != nil {
+				if err := s.store.UpdateBody(ctx, id, markdown.Serialize(wired)); err != nil {
 					return err
 				}
 			}
@@ -262,19 +263,20 @@ func (s *Service) applyPage(ctx context.Context, g notion.Gateway, p notion.Page
 	if err != nil {
 		return err
 	}
-	if _, err := s.store.ApplyRemote(ctx, store.RemoteMemo{
+	_, applied, err := s.presence.MergeRemote(ctx, store.RemoteMemo{
 		ID: id, PageID: p.ID, CreatedAt: created, UpdatedAt: updated, Revision: rev,
-		Blocks: blocks, Tags: notion.TagsFromPage(p), SyncedAt: s.clock(),
-	}); err != nil {
+		Body: markdown.Serialize(blocks), Tags: notion.TagsFromPage(p), SyncedAt: s.clock(),
+	})
+	if err != nil {
 		return err
 	}
-	if !wasEvicted {
+	if applied {
 		wired, err := s.importAttachments(ctx, g, id, blocks, atts)
 		if err != nil {
 			return err
 		}
 		if len(atts) > 0 {
-			if err := s.store.UpdateBlocks(ctx, id, wired); err != nil {
+			if err := s.store.UpdateBody(ctx, id, markdown.Serialize(wired)); err != nil {
 				return err
 			}
 		}
@@ -285,21 +287,54 @@ func (s *Service) applyPage(ctx context.Context, g notion.Gateway, p notion.Page
 }
 
 func (s *Service) fetchPage(ctx context.Context, g notion.Gateway, pageID string) ([]domain.Block, []notion.ImportedAttachment, error) {
-	var children []notion.Block
+	budget := 0
+	children, err := s.listBlockChildren(ctx, g, pageID, 0, &budget)
+	if err != nil {
+		return nil, nil, err
+	}
+	blocks, atts := notion.BlocksFromNotion(children)
+	return blocks, atts, nil
+}
+
+// listBlockChildren reads a page or block subtree. Notion returns only direct
+// children, so blocks with children are expanded recursively; otherwise
+// nested content (toggles, columns, synced blocks) would vanish on pull.
+func (s *Service) listBlockChildren(ctx context.Context, g notion.Gateway, blockID string, depth int, budget *int) ([]notion.Block, error) {
+	const maxDepth = 10
+	const maxBlocks = 5000
+	if depth > maxDepth || *budget >= maxBlocks {
+		return nil, nil
+	}
+	var out []notion.Block
 	cursor := ""
-	for len(children) < 2000 {
-		resp, err := g.ListChildren(ctx, pageID, cursor, 100)
+	for len(out) < 2000 && *budget < maxBlocks {
+		resp, err := g.ListChildren(ctx, blockID, cursor, 100)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		children = append(children, resp.Results...)
+		for _, block := range resp.Results {
+			if *budget >= maxBlocks {
+				break
+			}
+			*budget = *budget + 1
+			out = append(out, block)
+		}
 		if !resp.HasMore || resp.NextCursor == "" {
 			break
 		}
 		cursor = resp.NextCursor
 	}
-	blocks, atts := notion.BlocksFromNotion(children)
-	return blocks, atts, nil
+	for i := range out {
+		if !out[i].HasChildren || out[i].ID == "" {
+			continue
+		}
+		children, err := s.listBlockChildren(ctx, g, out[i].ID, depth+1, budget)
+		if err != nil {
+			return nil, err
+		}
+		out[i].Children = children
+	}
+	return out, nil
 }
 
 func (s *Service) importAttachments(ctx context.Context, g notion.Gateway, memoID string, blocks []domain.Block, atts []notion.ImportedAttachment) ([]domain.Block, error) {

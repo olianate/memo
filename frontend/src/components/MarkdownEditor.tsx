@@ -1,64 +1,21 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Attachment, Block } from "../types";
-import type { Backend } from "../backend";
-import { escapeHtml, inlineMarkdownToSpans, removeSpanRange, safeLinkUrl, spansFromDOM, spansToHtml, blockText } from "../lib/markdown";
-import { extractTagToken, matchInputRule, normalizeTag, removeTagToken, type TagToken } from "../lib/tag";
-import { humanBytes } from "../lib/format";
-import { CloseIcon, FileIcon, ImageIcon, LinkIcon, PaperclipIcon, PlusIcon } from "./Icons";
-
-let idCounter = 0;
-const nextId = () => `blk-${Date.now().toString(36)}-${(idCounter++).toString(36)}`;
-
-function caretOffset(el: HTMLElement): number {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return (el.textContent ?? "").length;
-  const range = selection.getRangeAt(0);
-  if (!el.contains(range.startContainer)) return (el.textContent ?? "").length;
-  const before = document.createRange();
-  before.selectNodeContents(el);
-  before.setEnd(range.startContainer, range.startOffset);
-  return before.toString().length;
-}
-
-function setCaret(el: HTMLElement, offset: number, toEnd = false) {
-  const range = document.createRange();
-  const selection = window.getSelection();
-  if (!selection) return;
-  const walk = (node: Node): { node: Node; offset: number } | null => {
-    let remaining = offset;
-    const visit = (n: Node): { node: Node; offset: number } | null => {
-      if (n.nodeType === Node.TEXT_NODE) {
-        const len = n.textContent?.length ?? 0;
-        if (remaining <= len) return { node: n, offset: remaining };
-        remaining -= len;
-        return null;
-      }
-      for (const child of Array.from(n.childNodes)) {
-        const found = visit(child);
-        if (found) return found;
-      }
-      return null;
-    };
-    return visit(node);
-  };
-  const position = toEnd ? null : walk(el);
-  if (position) {
-    range.setStart(position.node, position.offset);
-    range.collapse(true);
-  } else {
-    range.selectNodeContents(el);
-    range.collapse(false);
-  }
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AtomicCodeMirrorEditor, type AtomicCodeMirrorEditorHandle } from "@atomic-editor/editor";
+import "@atomic-editor/editor/styles.css";
+import { Prec, type Extension } from "@codemirror/state";
+import { EditorView, ViewPlugin, keymap, placeholder as cmPlaceholder, type ViewUpdate } from "@codemirror/view";
+import type { Attachment } from "../types";
+import type { MarkdownEditorBackend } from "../backend";
+import { blockText, blocksFromMarkdown, safeLinkUrl } from "../lib/markdown";
+import { extractTagToken, normalizeTag, removeTagToken, type TagToken } from "../lib/tag";
+import { countWords, humanBytes } from "../lib/format";
+import { CloseIcon, FileIcon, ImageIcon, PaperclipIcon } from "./Icons";
 
 interface EditorProps {
-  backend: Backend;
-  blocks: Block[];
+  backend: MarkdownEditorBackend;
+  body: string;
   tags: string[];
   attachments: Attachment[];
-  onChange: (blocks: Block[]) => void;
+  onBodyChange: (body: string) => void;
   onTagsChange: (tags: string[]) => void;
   onSubmit?: () => void;
   onEscape?: () => void;
@@ -71,12 +28,35 @@ interface EditorProps {
   onRemoveAttachment?: (id: string) => void;
 }
 
+function sameTagToken(a: TagToken | null, b: TagToken | null): boolean {
+  if (!a || !b) return a === b;
+  return a.token === b.token && a.start === b.start && a.end === b.end;
+}
+
+function textChange(previous: string, next: string): { from: number; to: number; insert: string } {
+  let from = 0;
+  const max = Math.min(previous.length, next.length);
+  while (from < max && previous[from] === next[from]) from++;
+  let previousEnd = previous.length;
+  let nextEnd = next.length;
+  while (previousEnd > from && nextEnd > from && previous[previousEnd - 1] === next[nextEnd - 1]) {
+    previousEnd--;
+    nextEnd--;
+  }
+  return { from, to: previousEnd, insert: next.slice(from, nextEnd) };
+}
+
+/**
+ * Markdown editor built on Atomic Editor (CodeMirror 6). The document is kept
+ * as verbatim Markdown: the editor owns the text while typing, and external
+ * updates replace the editor instance only when the body changes elsewhere.
+ */
 export function MarkdownEditor({
   backend,
-  blocks,
+  body,
   tags,
   attachments,
-  onChange,
+  onBodyChange,
   onTagsChange,
   onSubmit,
   onEscape,
@@ -88,32 +68,227 @@ export function MarkdownEditor({
   onAddAttachment,
   onRemoveAttachment,
 }: EditorProps) {
-  const [mode, setMode] = useState<"live" | "source">("live");
-  const [source, setSource] = useState("");
-  const [switching, setSwitching] = useState(false);
-  const [activeId, setActiveId] = useState<string | null>(blocks[0]?.id ?? null);
-  const [focusId, setFocusId] = useState<string | null>(null);
-  const [tagToken, setTagToken] = useState<(TagToken & { blockId: string }) | null>(null);
+  const [tagToken, setTagToken] = useState<TagToken | null>(null);
   const [suggestions, setSuggestions] = useState<{ id: string; name: string; count: number }[]>([]);
   const [addingTag, setAddingTag] = useState(false);
   const [tagDraft, setTagDraft] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [editorEpoch, setEditorEpoch] = useState(0);
+  const [imagePreview, setImagePreview] = useState<{ url: string; name: string } | null>(null);
+
+  const handleRef = useRef<AtomicCodeMirrorEditorHandle>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const editorRoot = useRef<HTMLDivElement>(null);
   const tagInput = useRef<HTMLInputElement>(null);
 
-  const effectiveBlocks = useMemo(
-    () => (blocks.length ? blocks : [{ id: "empty", type: "paragraph" as const, spans: [] }]),
-    [blocks],
-  );
-  const activeBlock = effectiveBlocks.find((b) => b.id === activeId) ?? effectiveBlocks[0];
+  const onBodyChangeRef = useRef(onBodyChange);
+  const onTagsChangeRef = useRef(onTagsChange);
+  const onSubmitRef = useRef(onSubmit);
+  const onEscapeRef = useRef(onEscape);
+  const onAddAttachmentRef = useRef(onAddAttachment);
+  const submitOnEnterRef = useRef(submitOnEnter);
+  const suggestionsRef = useRef(suggestions);
+  const addTagRef = useRef<(raw: string) => void>(() => {});
+  const commitTagRef = useRef<(view: EditorView, preferSuggestion: boolean) => boolean>(() => false);
+  const commitPendingTagRef = useRef<(view: EditorView) => boolean>(() => false);
+  const lastEmittedRef = useRef(body);
 
   useEffect(() => {
-    if (autoFocus && editorRoot.current) {
-      const first = editorRoot.current.querySelector<HTMLElement>(".ed-input");
-      first?.focus();
-    }
-  }, [autoFocus]);
+    onBodyChangeRef.current = onBodyChange;
+    onTagsChangeRef.current = onTagsChange;
+    onSubmitRef.current = onSubmit;
+    onEscapeRef.current = onEscape;
+    onAddAttachmentRef.current = onAddAttachment;
+    submitOnEnterRef.current = submitOnEnter;
+    suggestionsRef.current = suggestions;
+  }, [onAddAttachment, onBodyChange, onEscape, onSubmit, onTagsChange, submitOnEnter, suggestions]);
+
+  const referencedAttachments = useMemo(() => {
+    const ids = new Set<string>();
+    for (const match of body.matchAll(/attachment:\/\/([^\s)]+)/g)) ids.add(match[1]);
+    return ids;
+  }, [body]);
+  const looseAttachments = attachments.filter((attachment) => !referencedAttachments.has(attachment.id));
+  const wordCount = useMemo(() => {
+    const plain = blocksFromMarkdown(body)
+      .map(blockText)
+      .join(" ");
+    return countWords(plain);
+  }, [body]);
+
+  const addTag = useCallback(
+    (raw: string) => {
+      const name = raw.trim().replace(/^#+/, "").trim();
+      if (!name) return;
+      if (tags.some((tag) => normalizeTag(tag) === normalizeTag(name))) return;
+      onTagsChangeRef.current([...tags, name]);
+    },
+    [tags],
+  );
+  addTagRef.current = addTag;
+
+  const handleMarkdownChange = useCallback((markdown: string) => {
+    if (markdown === lastEmittedRef.current) return;
+    lastEmittedRef.current = markdown;
+    onBodyChangeRef.current(markdown);
+  }, []);
+
+  // An external body update (memo switch, attachment upload) replaces the
+  // editor document. Local typing updates lastEmittedRef first, so normal
+  // edits never remount the view.
+  useEffect(() => {
+    if (body === lastEmittedRef.current) return;
+    lastEmittedRef.current = body;
+    setEditorEpoch((value) => value + 1);
+  }, [body]);
+
+  const commitTagResult = useCallback((view: EditorView, caret: number, next: string, name: string) => {
+    const document = view.state.doc.toString();
+    view.dispatch({
+      changes: textChange(document, next),
+      selection: { anchor: caret },
+      scrollIntoView: true,
+    });
+    view.focus();
+    addTagRef.current(name);
+    setTagToken(null);
+    setSuggestions([]);
+  }, []);
+
+  const commitTagToken = useCallback(
+    (view: EditorView, token: TagToken, name: string) => {
+      const document = view.state.doc.toString();
+      commitTagResult(view, token.start, removeTagToken(document, token.start, token.end), name);
+    },
+    [commitTagResult],
+  );
+
+  const commitTag = useCallback(
+    (name: string) => {
+      const view = viewRef.current;
+      if (!view) return;
+      const document = view.state.doc.toString();
+      const token = extractTagToken(document, view.state.selection.main.head);
+      if (!token) return;
+      commitTagToken(view, token, name);
+    },
+    [commitTagToken],
+  );
+
+  const commitTagInView = useCallback(
+    (view: EditorView, preferSuggestion: boolean): boolean => {
+      if (view.composing) return false;
+      const document = view.state.doc.toString();
+      const token = extractTagToken(document, view.state.selection.main.head);
+      if (!token) return false;
+      const suggestion = suggestionsRef.current[0];
+      const name = preferSuggestion && suggestion ? suggestion.name : token.token;
+      commitTagToken(view, token, name);
+      return true;
+    },
+    [commitTagToken],
+  );
+  commitTagRef.current = commitTagInView;
+
+  // Typing a space (or newline) right after `#tag` commits the tag even if a
+  // competing keymap inserts the whitespace first. Runs after the edit lands,
+  // so it also covers IME and paste input.
+  const commitPendingTagAfterWhitespace = useCallback((view: EditorView): boolean => {
+    if (view.composing) return false;
+    const document = view.state.doc.toString();
+    const head = view.state.selection.main.head;
+    const whitespace = document[head - 1];
+    if (whitespace !== " " && whitespace !== "\n") return false;
+    const token = extractTagToken(document, head - 1);
+    if (!token) return false;
+    const next =
+      whitespace === " "
+        ? document.slice(0, token.start) + document.slice(head)
+        : removeTagToken(document, token.start, token.end);
+    commitTagResult(view, token.start, next, token.token);
+    return true;
+  }, [commitTagResult]);
+  commitPendingTagRef.current = commitPendingTagAfterWhitespace;
+
+  const extensions = useMemo<Extension[]>(() => {
+    const syncTagToken = (view: EditorView) => {
+      const next = extractTagToken(view.state.doc.toString(), view.state.selection.main.head);
+      setTagToken((previous) => (sameTagToken(previous, next) ? previous : next));
+    };
+    const submit = (view: EditorView): boolean => {
+      if (view.composing || !onSubmitRef.current) return false;
+      onSubmitRef.current();
+      return true;
+    };
+    return [
+      EditorView.contentAttributes.of({ "aria-label": "Markdown 正文", spellcheck: "false" }),
+      cmPlaceholder(placeholder),
+      Prec.highest(
+        keymap.of([
+          {
+            key: "Enter",
+            run: (view) => (submitOnEnterRef.current ? submit(view) : false),
+          },
+          {
+            key: "Shift-Enter",
+            run: (view) => (submitOnEnterRef.current ? false : submit(view)),
+          },
+          {
+            key: "Escape",
+            run: () => {
+              if (handleRef.current?.isSearchOpen()) return false;
+              if (!onEscapeRef.current) return false;
+              onEscapeRef.current();
+              return true;
+            },
+          },
+          { key: "Space", run: (view) => commitTagRef.current(view, false) },
+          { key: "Tab", run: (view) => commitTagRef.current(view, true) },
+        ]),
+      ),
+      ViewPlugin.fromClass(
+        class {
+          constructor(private view: EditorView) {
+            viewRef.current = view;
+            syncTagToken(view);
+          }
+
+          update(update: ViewUpdate) {
+            this.view = update.view;
+            viewRef.current = update.view;
+            if (update.docChanged || update.selectionSet) syncTagToken(update.view);
+            if (update.docChanged) {
+              const view = update.view;
+              queueMicrotask(() => {
+                if (viewRef.current === view) commitPendingTagRef.current(view);
+              });
+            }
+          }
+
+          destroy() {
+            if (viewRef.current === this.view) viewRef.current = null;
+          }
+        },
+      ),
+      EditorView.domEventHandlers({
+        paste(event) {
+          const files = filesFromClipboard(event);
+          if (!files.length) return false;
+          event.preventDefault();
+          onAddAttachmentRef.current?.(files);
+          return true;
+        },
+        drop(event) {
+          const files = filesFromDrop(event);
+          if (!files.length) return false;
+          event.preventDefault();
+          onAddAttachmentRef.current?.(files);
+          return true;
+        },
+      }),
+    ];
+  }, [placeholder]);
 
   useEffect(() => {
     if (!tagToken) {
@@ -132,377 +307,148 @@ export function MarkdownEditor({
     return () => {
       alive = false;
     };
-  }, [backend, tagToken?.token, tagToken?.blockId]);
+  }, [backend, tagToken?.token]);
 
   useEffect(() => {
     if (addingTag) tagInput.current?.focus();
   }, [addingTag]);
 
-  // Source mode edits must reach the parent before a save. Parse on a short
-  // debounce so the canonical block AST is current even if the user clicks the
-  // send button without switching back to live mode.
-  const sourceSeq = useRef(0);
   useEffect(() => {
-    if (mode !== "source") return;
-    const seq = ++sourceSeq.current;
-    const timer = window.setTimeout(() => {
-      backend
-        .parseMarkdown(source)
-        .then((parsed) => {
-          if (seq !== sourceSeq.current) return;
-          onChange(parsed.length ? parsed : [{ id: nextId(), type: "paragraph", spans: [] }]);
-        })
-        .catch(() => {});
-    }, 80);
-    return () => window.clearTimeout(timer);
-  }, [backend, mode, onChange, source]);
+    if (!autoFocus) return;
+    const frame = requestAnimationFrame(() => {
+      handleRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [autoFocus, editorEpoch]);
 
-  const updateBlock = useCallback(
-    (id: string, patch: Partial<Block>) => {
-      const next = effectiveBlocks.map((b) => (b.id === id ? { ...b, ...patch } : b));
-      onChange(next);
-    },
-    [effectiveBlocks, onChange],
-  );
-
-  const addTag = useCallback(
-    (raw: string) => {
-      const name = raw.trim().replace(/^#+/, "").trim();
-      if (!name) return;
-      if (tags.some((tag) => normalizeTag(tag) === normalizeTag(name))) return;
-      onTagsChange([...tags, name]);
-    },
-    [onTagsChange, tags],
-  );
-
-  const commitTag = useCallback(
-    (name: string) => {
-      if (!tagToken) return;
-      const token = tagToken;
-      const block = effectiveBlocks.find((b) => b.id === token.blockId);
-      if (!block) return;
-      const text = blockText(block);
-      const nextText = removeTagToken(text, token.start, token.end);
-      const nextSpans = removeSpanRange(block.spans ?? [], token.start, token.end);
-      updateBlock(token.blockId, { spans: nextSpans });
-      const exists = tags.some((t) => normalizeTag(t) === normalizeTag(name));
-      if (!exists) onTagsChange([...tags, name]);
-      setTagToken(null);
-      setSuggestions([]);
-      requestAnimationFrame(() => {
-        const el = editorRoot.current?.querySelector<HTMLElement>(`[data-block="${token.blockId}"] .ed-input`);
-        if (el) {
-          // The block stays focused while the chip is committed; update the
-          // contentEditable DOM directly so the token disappears immediately.
-          el.innerHTML = spansToHtml(nextSpans);
-          el.focus();
-          setCaret(el, Math.min(token.start, nextText.length));
-        }
-      });
-    },
-    [effectiveBlocks, onTagsChange, tags, tagToken, updateBlock],
-  );
-
-  const splitBlock = useCallback(
-    (index: number, before: string, after: string) => {
-      const current = effectiveBlocks[index];
-      if (!current) return;
-      const keepType = ["bullet", "ordered", "todo"].includes(current.type);
-      if (keepType && !before && !after) {
-        updateBlock(current.id, { type: "paragraph", checked: false });
-        return;
+  // Atomic's image widget renders the raw `attachment://id` source. Replace
+  // each rendered image with the thumbnail served by the backend.
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    let alive = true;
+    const fixed = new WeakSet<HTMLImageElement>();
+    const fix = () => {
+      for (const image of shell.querySelectorAll<HTMLImageElement>('img[src^="attachment://"]')) {
+        if (fixed.has(image)) continue;
+        fixed.add(image);
+        const id = image.getAttribute("src")?.slice("attachment://".length) ?? "";
+        if (!id) continue;
+        image.dataset.attachmentId = id;
+        image.classList.add("attachment-inline-image");
+        backend
+          .attachmentThumb(id)
+          .then((url) => {
+            if (alive) image.src = url;
+          })
+          .catch(() => {
+            if (alive) image.dataset.attachmentError = "true";
+          });
       }
-      const updatedCurrent = { ...current, spans: inlineMarkdownToSpans(before) };
-      const newBlock: Block = {
-        id: nextId(),
-        type: keepType ? current.type : "paragraph",
-        checked: false,
-        level: undefined,
-        spans: inlineMarkdownToSpans(after),
-      };
-      const next = [...effectiveBlocks.slice(0, index), updatedCurrent, newBlock, ...effectiveBlocks.slice(index + 1)];
-      onChange(next);
-      setFocusId(newBlock.id);
-    },
-    [effectiveBlocks, onChange, updateBlock],
-  );
+    };
+    fix();
+    const observer = new MutationObserver(fix);
+    observer.observe(shell, { childList: true, subtree: true });
+    return () => {
+      alive = false;
+      observer.disconnect();
+    };
+  }, [backend, editorEpoch]);
 
-  const onBlockKeyDown = (event: React.KeyboardEvent<HTMLElement>, block: Block, index: number) => {
-    if (disabled) return;
-    const native = event.nativeEvent as KeyboardEvent;
-    if (native.isComposing || native.keyCode === 229) return;
-    const el = event.currentTarget as HTMLElement;
-    const text = el.textContent ?? "";
-    const caret = el.textContent === "" && el.innerHTML.includes("<br>") ? 0 : caretOffset(el);
-
-    if (event.key === "Escape") {
-      if (onEscape) {
-        event.preventDefault();
-        onEscape();
-      }
-      return;
-    }
-
-    if (event.key === "Enter") {
-      if (submitOnEnter && !event.shiftKey) {
-        event.preventDefault();
-        onSubmit?.();
-        return;
-      }
+  // Inline attachment images open full-size when clicked.
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const onClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const image = target?.closest?.("img[data-attachment-id]") as HTMLImageElement | null;
+      if (!image) return;
+      const id = image.dataset.attachmentId;
+      if (!id) return;
       event.preventDefault();
-      const before = text.slice(0, caret);
-      const after = text.slice(caret);
-      splitBlock(index, before, after);
+      event.stopPropagation();
+      const name = image.alt || "图片";
+      backend
+        .attachmentData(id)
+        .then((url) => setImagePreview({ url, name }))
+        .catch(() => {});
+    };
+    shell.addEventListener("click", onClick, true);
+    return () => shell.removeEventListener("click", onClick, true);
+  }, [backend, editorEpoch]);
+
+  const openLink = (url: string) => {
+    if (url.startsWith("attachment://")) {
+      void backend.openAttachment(url.slice("attachment://".length)).catch(() => {});
       return;
     }
-
-    if (event.key === " " || event.key === "Tab") {
-      const token = extractTagToken(text, caret);
-      if (token) {
-        event.preventDefault();
-        if (event.key === "Tab" && suggestions.length > 0) commitTag(suggestions[0].name);
-        else commitTag(token.token);
-        return;
-      }
-      if (event.key === " ") {
-        const rule = matchInputRule(text.slice(0, caret));
-        if (rule && caret === text.length) {
-          event.preventDefault();
-          const patch: Partial<Block> = { type: rule.type as Block["type"], spans: [] };
-          if (rule.level) patch.level = rule.level;
-          updateBlock(block.id, patch);
-          return;
-        }
-      }
-    }
-
-    if (event.key === "Backspace" && caret === 0 && window.getSelection()?.isCollapsed) {
-      if (block.type !== "paragraph" && block.type !== "heading") {
-        event.preventDefault();
-        updateBlock(block.id, { type: "paragraph", level: undefined, checked: false });
-        return;
-      }
-      if (block.type === "heading") {
-        event.preventDefault();
-        updateBlock(block.id, { type: "paragraph", level: undefined });
-        return;
-      }
-      if (index > 0) {
-        event.preventDefault();
-        const prev = effectiveBlocks[index - 1];
-        const merged = `${blockText(prev)}${text}`;
-        const next = [...effectiveBlocks];
-        next[index - 1] = { ...prev, spans: [{ text: merged }] };
-        next.splice(index, 1);
-        onChange(next);
-        setFocusId(prev.id);
-        requestAnimationFrame(() => {
-          const target = editorRoot.current?.querySelector<HTMLElement>(`[data-block="${prev.id}"] .ed-input`);
-          if (target) {
-            target.focus();
-            setCaret(target, blockText(prev).length);
-          }
-        });
-      }
-    }
-  };
-
-  const onBlockInput = (event: React.FormEvent<HTMLDivElement>, block: Block) => {
-    const el = event.currentTarget;
-    const spans = spansFromDOM(el);
-    updateBlock(block.id, { spans });
-    const text = el.textContent ?? "";
-    const caret = caretOffset(el);
-    const token = extractTagToken(text, caret);
-    if (token) setTagToken({ ...token, blockId: block.id });
-    else if (tagToken?.blockId === block.id) setTagToken(null);
-  };
-
-  const onBlockBlur = (event: React.FocusEvent<HTMLDivElement>, block: Block) => {
-    const el = event.currentTarget;
-    const text = el.textContent ?? "";
-    // Preserve marks created by the toolbar or rich paste. Only parse Markdown
-    // syntax when the DOM itself has no formatting.
-    const domSpans = spansFromDOM(el);
-    const hasMarks = domSpans.some((s) => s.bold || s.italic || s.strike || s.code || s.link);
-    const parsed = hasMarks ? domSpans : inlineMarkdownToSpans(text);
-    updateBlock(block.id, { spans: parsed });
-    // The block is no longer focused, so render the parsed marks immediately
-    // instead of waiting for a state change that may be a no-op.
-    el.innerHTML = spansToHtml(parsed);
-  };
-
-  const applyType = (type: Block["type"], level?: number) => {
-    if (!activeBlock) return;
-    updateBlock(activeBlock.id, { type, level, checked: false });
-    setFocusId(activeBlock.id);
-  };
-
-  const addBlock = (afterIndex = effectiveBlocks.length - 1, type: Block["type"] = "paragraph") => {
-    const block: Block = { id: nextId(), type, spans: [] };
-    const next = [...effectiveBlocks.slice(0, afterIndex + 1), block, ...effectiveBlocks.slice(afterIndex + 1)];
-    onChange(next);
-    setFocusId(block.id);
-    setActiveId(block.id);
-  };
-
-  const removeBlock = (id: string) => {
-    const index = effectiveBlocks.findIndex((b) => b.id === id);
-    const next = effectiveBlocks.filter((b) => b.id !== id);
-    onChange(next.length ? next : [{ id: nextId(), type: "paragraph", spans: [] }]);
-    const target = next[Math.max(0, index - 1)];
-    if (target) setFocusId(target.id);
-  };
-
-  const executeInline = (command: "bold" | "italic" | "strikeThrough" | "code") => {
-    if (!activeBlock) return;
-    const el = editorRoot.current?.querySelector<HTMLElement>(`[data-block="${activeBlock.id}"] .ed-input`);
-    if (!el) return;
-    el.focus();
-    if (command === "code") {
-      const selection = window.getSelection();
-      const selected = selection?.toString() ?? "";
-      if (selected) document.execCommand("insertHTML", false, `<code>${selected.replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</code>`);
-    } else {
-      document.execCommand(command, false);
-    }
-    updateBlock(activeBlock.id, { spans: spansFromDOM(el) });
-  };
-
-  const insertLink = () => {
-    if (!activeBlock) return;
-    const el = editorRoot.current?.querySelector<HTMLElement>(`[data-block="${activeBlock.id}"] .ed-input`);
-    if (!el) return;
-    el.focus();
-    const selection = window.getSelection();
-    const range = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-    const selected = selection?.toString() ?? "";
-    const raw = window.prompt("链接地址", "https://");
-    if (raw === null) return;
-    const href = safeLinkUrl(raw);
-    if (!href) {
-      window.alert("请输入有效的 http(s)、mailto 链接或域名");
-      return;
-    }
-    el.focus();
-    if (selection && range) {
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
-    const label = selected.trim() ? selected : href;
-    document.execCommand("insertHTML", false, `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`);
-    updateBlock(activeBlock.id, { spans: spansFromDOM(el) });
-  };
-
-  const switchToSource = async () => {
-    setSwitching(true);
-    try {
-      setSource(await backend.serializeMarkdown(effectiveBlocks));
-      setMode("source");
-      setTagToken(null);
-    } finally {
-      setSwitching(false);
-    }
-  };
-
-  const switchToLive = async () => {
-    setSwitching(true);
-    try {
-      const parsed = await backend.parseMarkdown(source);
-      onChange(parsed.length ? parsed : [{ id: nextId(), type: "paragraph", spans: [] }]);
-      setMode("live");
-    } finally {
-      setSwitching(false);
-    }
+    const safe = safeLinkUrl(url);
+    if (safe) void backend.openURL(safe).catch(() => {});
   };
 
   const handleFiles = (files: File[]) => {
-    if (!onAddAttachment || files.length === 0) return;
-    onAddAttachment(files);
+    if (!onAddAttachmentRef.current || files.length === 0) return;
+    onAddAttachmentRef.current(files);
   };
 
-  const onPaste = (event: React.ClipboardEvent) => {
-    const items = event.clipboardData?.items;
-    if (!items || !onAddAttachment) return;
-    const files: File[] = [];
-    for (const item of Array.from(items)) {
-      if (item.kind === "file") {
-        const file = item.getAsFile();
-        if (file) files.push(file);
-      }
-    }
-    if (files.length) {
-      event.preventDefault();
-      handleFiles(files);
-    }
-  };
-
-  const onDrop = (event: React.DragEvent) => {
-    if (!onAddAttachment) return;
-    const files = Array.from(event.dataTransfer?.files ?? []);
-    if (files.length) {
-      event.preventDefault();
-      setDragging(false);
-      handleFiles(files);
-    }
-  };
-
-  const attachmentFor = (block: Block) => attachments.find((a) => a.id === block.attachment_id);
+  const tagRow = (
+    <div className="tag-row tag-row-editor">
+      {tags.map((tag) => (
+        <span className="tag-chip" key={tag}>
+          #{tag}
+          <button type="button" aria-label={`移除标签 ${tag}`} onClick={() => onTagsChange(tags.filter((t) => t !== tag))}>
+            ×
+          </button>
+        </span>
+      ))}
+      {addingTag ? (
+        <input
+          ref={tagInput}
+          className="tag-input"
+          value={tagDraft}
+          placeholder="标签名"
+          onChange={(event) => setTagDraft(event.target.value)}
+          onBlur={() => {
+            addTag(tagDraft);
+            setTagDraft("");
+            setAddingTag(false);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              addTag(tagDraft);
+              setTagDraft("");
+              setAddingTag(false);
+            }
+            if (event.key === "Escape") {
+              setTagDraft("");
+              setAddingTag(false);
+            }
+          }}
+        />
+      ) : (
+        <button type="button" className="tag-add" onClick={() => setAddingTag(true)}>
+          + 标签
+        </button>
+      )}
+      <span className="tag-hint">#标签 直接转换</span>
+    </div>
+  );
 
   return (
     <div
       className={`editor ${compact ? "editor-compact" : ""} ${dragging ? "is-dragging" : ""}`}
-      onDragOver={(e) => {
-        if (onAddAttachment && e.dataTransfer?.types.includes("Files")) {
-          e.preventDefault();
+      onDragOver={(event) => {
+        if (onAddAttachment && event.dataTransfer?.types.includes("Files")) {
+          event.preventDefault();
           setDragging(true);
         }
       }}
       onDragLeave={() => setDragging(false)}
-      onDrop={onDrop}
-      onPaste={onPaste}
+      onDrop={() => setDragging(false)}
     >
-      <div className="editor-toolbar" role="toolbar" aria-label="格式工具栏">
-        <div className="toolbar-group">
-          <button type="button" className="tool-btn toolbar-text" title="标题 1" onMouseDown={(e) => e.preventDefault()} onClick={() => applyType("heading", 1)}>
-            H1
-          </button>
-          <button type="button" className="tool-btn toolbar-text" title="标题 2" onMouseDown={(e) => e.preventDefault()} onClick={() => applyType("heading", 2)}>
-            H2
-          </button>
-          <button type="button" className="tool-btn toolbar-text" title="标题 3" onMouseDown={(e) => e.preventDefault()} onClick={() => applyType("heading", 3)}>
-            H3
-          </button>
-          <button type="button" className="tool-btn toolbar-text" title="无序列表" onMouseDown={(e) => e.preventDefault()} onClick={() => applyType("bullet")}>
-            •
-          </button>
-          <button type="button" className="tool-btn toolbar-text" title="有序列表" onMouseDown={(e) => e.preventDefault()} onClick={() => applyType("ordered")}>
-            1.
-          </button>
-          <button type="button" className="tool-btn toolbar-text" title="待办" onMouseDown={(e) => e.preventDefault()} onClick={() => applyType("todo")}>
-            ☐
-          </button>
-          <button type="button" className="tool-btn toolbar-text" title="引用" onMouseDown={(e) => e.preventDefault()} onClick={() => applyType("quote")}>
-            “
-          </button>
-        </div>
-        <div className="toolbar-group">
-          <button type="button" className="tool-btn" title="粗体" aria-label="粗体" onMouseDown={(e) => e.preventDefault()} onClick={() => executeInline("bold")}>
-            <strong>B</strong>
-          </button>
-          <button type="button" className="tool-btn" title="斜体" aria-label="斜体" onMouseDown={(e) => e.preventDefault()} onClick={() => executeInline("italic")}>
-            <em>I</em>
-          </button>
-          <button type="button" className="tool-btn" title="删除线" aria-label="删除线" onMouseDown={(e) => e.preventDefault()} onClick={() => executeInline("strikeThrough")}>
-            <s>S</s>
-          </button>
-          <button type="button" className="tool-btn" title="行内代码" aria-label="行内代码" onMouseDown={(e) => e.preventDefault()} onClick={() => executeInline("code")}>
-            <code>{"</>"}</code>
-          </button>
-          <button type="button" className="tool-btn" title="插入链接" aria-label="插入链接" onMouseDown={(e) => e.preventDefault()} onClick={insertLink}>
-            <LinkIcon size={15} />
-          </button>
-        </div>
+      <div className="editor-toolbar" role="toolbar" aria-label="Markdown 工具栏">
+        <span className="editor-mode-label">Markdown</span>
         <div className="toolbar-group toolbar-spacer">
           {onAddAttachment && (
             <>
@@ -511,7 +457,6 @@ export function MarkdownEditor({
                 className="tool-btn"
                 title="添加图片或文件"
                 aria-label="添加图片或文件"
-                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => fileInput.current?.click()}
               >
                 <PaperclipIcon size={16} />
@@ -521,110 +466,52 @@ export function MarkdownEditor({
                 type="file"
                 multiple
                 className="file-input"
-                onChange={(e) => {
-                  handleFiles(Array.from(e.target.files ?? []));
-                  e.target.value = "";
+                onChange={(event) => {
+                  handleFiles(Array.from(event.target.files ?? []));
+                  event.target.value = "";
                 }}
               />
             </>
           )}
-          <div className="mode-switch" role="group" aria-label="编辑模式">
-            <button
-              type="button"
-              className={mode === "live" ? "is-active" : ""}
-              onClick={() => {
-                if (mode === "source") void switchToLive();
-              }}
-              disabled={switching}
-            >
-              实时渲染
-            </button>
-            <button
-              type="button"
-              className={mode === "source" ? "is-active" : ""}
-              onClick={() => {
-                if (mode === "live") void switchToSource();
-              }}
-              disabled={switching}
-            >
-              源码
-            </button>
-          </div>
         </div>
       </div>
 
-      {mode === "source" ? (
-        <textarea
-          className="source-editor"
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
-          spellCheck={false}
-          aria-label="Markdown 源码"
-          rows={Math.max(4, source.split("\n").length)}
+      {tagRow}
+
+      <div className="atomic-editor-shell" ref={shellRef}>
+        <AtomicCodeMirrorEditor
+          key={editorEpoch}
+          documentId={`memo-${editorEpoch}`}
+          markdownSource={body}
+          onMarkdownChange={handleMarkdownChange}
+          onLinkClick={openLink}
+          editorHandleRef={handleRef}
+          readOnly={disabled}
+          blurEditorOnMount={!autoFocus}
+          extensions={extensions}
         />
-      ) : (
-        <div className="editor-blocks" ref={editorRoot}>
-          {effectiveBlocks.map((block, index) => {
-            const attachment = attachmentFor(block);
-            if (block.type === "divider") {
-              return (
-                <div className="ed-row ed-divider" key={block.id}>
-                  <hr />
-                  <button type="button" className="block-remove" aria-label="删除分隔线" onClick={() => removeBlock(block.id)}>
-                    <CloseIcon size={14} />
-                  </button>
-                </div>
-              );
-            }
-            if (block.type === "image" || block.type === "file") {
-              return (
-                <div className="ed-row ed-attachment" key={block.id} data-block={block.id}>
-                  {attachment ? (
-                    <AttachmentBlock backend={backend} attachment={attachment} onRemove={onRemoveAttachment ? () => onRemoveAttachment(attachment.id) : undefined} />
-                  ) : (
-                    <span className="muted">附件信息缺失</span>
-                  )}
-                </div>
-              );
-            }
-            if (block.type === "code") {
-              return (
-                <div className="ed-row ed-code" key={block.id} data-block={block.id}>
-                  <textarea
-                    className="ed-code-input"
-                    value={blockText(block)}
-                    placeholder="代码"
-                    spellCheck={false}
-                    onFocus={() => setActiveId(block.id)}
-                    onChange={(e) => updateBlock(block.id, { spans: [{ text: e.target.value }] })}
-                  />
-                  <button type="button" className="block-remove" aria-label="删除代码块" onClick={() => removeBlock(block.id)}>
-                    <CloseIcon size={14} />
-                  </button>
-                </div>
-              );
-            }
-            return (
-              <BlockRow
-                key={block.id}
-                block={block}
-                index={index}
-                active={activeBlock?.id === block.id}
-                shouldFocus={focusId === block.id}
-                placeholder={index === 0 ? placeholder : ""}
-                onFocus={() => setActiveId(block.id)}
-                onFocused={() => setFocusId(null)}
-                onInput={(e) => onBlockInput(e, block)}
-                onBlur={(e) => onBlockBlur(e, block)}
-                onKeyDown={(e) => onBlockKeyDown(e, block, index)}
-                onToggle={() => updateBlock(block.id, { checked: !block.checked })}
-                onRemove={() => removeBlock(block.id)}
-              />
-            );
-          })}
-          <button type="button" className="add-block" onClick={() => addBlock()}>
-            <PlusIcon size={14} /> 添加块
-          </button>
+      </div>
+
+      <div className="editor-word-count" aria-label={`字数 ${wordCount}`}>
+        字数 {wordCount}
+      </div>
+
+      {imagePreview && (
+        <div className="lightbox" role="dialog" aria-modal="true" onClick={() => setImagePreview(null)}>
+          <img src={imagePreview.url} alt={imagePreview.name} />
+        </div>
+      )}
+
+      {looseAttachments.length > 0 && (
+        <div className="editor-attachments">
+          {looseAttachments.map((attachment) => (
+            <AttachmentBlock
+              key={attachment.id}
+              backend={backend}
+              attachment={attachment}
+              onRemove={onRemoveAttachment ? () => onRemoveAttachment(attachment.id) : undefined}
+            />
+          ))}
         </div>
       )}
 
@@ -636,8 +523,8 @@ export function MarkdownEditor({
               key={s.id}
               role="option"
               aria-selected="false"
-              onMouseDown={(e) => {
-                e.preventDefault();
+              onMouseDown={(event) => {
+                event.preventDefault();
                 commitTag(s.name);
               }}
             >
@@ -648,134 +535,25 @@ export function MarkdownEditor({
         </div>
       )}
 
-      <div className="tag-row">
-        {tags.map((tag) => (
-          <span className="tag-chip" key={tag}>
-            #{tag}
-            <button type="button" aria-label={`移除标签 ${tag}`} onClick={() => onTagsChange(tags.filter((t) => t !== tag))}>
-              ×
-            </button>
-          </span>
-        ))}
-        {addingTag ? (
-          <input
-            ref={tagInput}
-            className="tag-input"
-            value={tagDraft}
-            placeholder="标签名"
-            onChange={(e) => setTagDraft(e.target.value)}
-            onBlur={() => {
-              addTag(tagDraft);
-              setTagDraft("");
-              setAddingTag(false);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addTag(tagDraft);
-                setTagDraft("");
-                setAddingTag(false);
-              }
-              if (e.key === "Escape") {
-                setTagDraft("");
-                setAddingTag(false);
-              }
-            }}
-          />
-        ) : (
-          <button type="button" className="tag-add" onClick={() => setAddingTag(true)}>
-            + 标签
-          </button>
-        )}
-        <span className="tag-hint">#标签 直接转换 · # 空格 = 标题</span>
-      </div>
-
       {dragging && <div className="drop-hint">松开以添加图片或文件</div>}
     </div>
   );
 }
 
-function BlockRow({
-  block,
-  index,
-  active,
-  shouldFocus,
-  placeholder,
-  onFocus,
-  onFocused,
-  onInput,
-  onBlur,
-  onKeyDown,
-  onToggle,
-  onRemove,
-}: {
-  block: Block;
-  index: number;
-  active: boolean;
-  shouldFocus: boolean;
-  placeholder: string;
-  onFocus: () => void;
-  onFocused: () => void;
-  onInput: (e: React.FormEvent<HTMLDivElement>) => void;
-  onBlur: (e: React.FocusEvent<HTMLDivElement>) => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
-  onToggle: () => void;
-  onRemove: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const focused = useRef(false);
+function filesFromClipboard(event: ClipboardEvent): File[] {
+  const items = event.clipboardData?.items;
+  if (!items) return [];
+  const files: File[] = [];
+  for (const item of Array.from(items)) {
+    if (item.kind !== "file") continue;
+    const file = item.getAsFile();
+    if (file) files.push(file);
+  }
+  return files;
+}
 
-  useEffect(() => {
-    if (!ref.current || focused.current) return;
-    const html = spansToHtml(block.spans);
-    if (ref.current.innerHTML !== html) ref.current.innerHTML = html;
-  }, [block.id, block.spans]);
-
-  useEffect(() => {
-    if (!shouldFocus || !ref.current) return;
-    ref.current.focus();
-    setCaret(ref.current, 0);
-    onFocused();
-  }, [shouldFocus, onFocused]);
-
-  const prefix =
-    block.type === "bullet" ? "•" : block.type === "ordered" ? "1." : block.type === "todo" ? null : null;
-
-  return (
-    <div
-      className={`ed-row ${active ? "is-active" : ""} ed-${block.type} ${block.checked ? "is-done" : ""}`}
-      data-block={block.id}
-    >
-      {block.type === "todo" && (
-        <input type="checkbox" className="todo-box" checked={Boolean(block.checked)} onChange={onToggle} aria-label="完成待办" />
-      )}
-      {prefix && <span className="ed-prefix">{prefix}</span>}
-      {block.type === "quote" && <span className="quote-bar" aria-hidden="true" />}
-      <div
-        ref={ref}
-        className="ed-input"
-        contentEditable={true}
-        suppressContentEditableWarning
-        role="textbox"
-        aria-multiline="true"
-        aria-label={index === 0 ? "记录内容" : `第 ${index + 1} 块`}
-        data-placeholder={placeholder}
-        onFocus={() => {
-          focused.current = true;
-          onFocus();
-        }}
-        onBlur={(e) => {
-          focused.current = false;
-          onBlur(e);
-        }}
-        onInput={onInput}
-        onKeyDown={onKeyDown}
-      />
-      <button type="button" className="block-remove" aria-label="删除块" onClick={onRemove}>
-        <CloseIcon size={13} />
-      </button>
-    </div>
-  );
+function filesFromDrop(event: DragEvent): File[] {
+  return Array.from(event.dataTransfer?.files ?? []);
 }
 
 export function AttachmentBlock({
@@ -783,7 +561,7 @@ export function AttachmentBlock({
   attachment,
   onRemove,
 }: {
-  backend: Backend;
+  backend: MarkdownEditorBackend;
   attachment: Attachment;
   onRemove?: () => void;
 }) {

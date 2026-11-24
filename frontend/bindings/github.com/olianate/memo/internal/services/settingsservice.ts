@@ -19,6 +19,13 @@ import * as store$0 from "../store/models.js";
 import * as $models from "./models.js";
 
 /**
+ * ClearLogs deletes every local sync and error log entry.
+ */
+export function ClearLogs(): $CancellablePromise<void> {
+    return $Call.ByID(2126324787);
+}
+
+/**
  * CompleteOnboarding marks first-run setup as done (skip or Notion connect).
  */
 export function CompleteOnboarding(): $CancellablePromise<void> {
@@ -121,6 +128,14 @@ export function SetRetention(days: number, immediate: boolean): $CancellableProm
  */
 export function SetStartAtLogin(enabled: boolean): $CancellablePromise<void> {
     return $Call.ByID(3449873343, enabled);
+}
+
+/**
+ * SetSubmitOnEnter chooses whether Enter saves and Shift+Enter inserts a
+ * newline (true), or Enter inserts a newline and Shift+Enter saves (false).
+ */
+export function SetSubmitOnEnter(enabled: boolean): $CancellablePromise<void> {
+    return $Call.ByID(532029270, enabled);
 }
 
 /**

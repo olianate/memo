@@ -1,24 +1,22 @@
 import { useRef, useState } from "react";
-import type { Attachment, Block } from "../types";
-import type { Backend } from "../backend";
+import type { Attachment } from "../types";
+import type { MemoDraftBackend } from "../backend";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { SendIcon } from "./Icons";
 import { fileToBase64 } from "../lib/files";
-
-function newParagraph(): Block {
-  return { id: `draft-${Math.random().toString(36).slice(2, 10)}`, type: "paragraph", spans: [] };
-}
 
 export function Composer({
   backend,
   onSaved,
   onError,
+  submitOnEnter = true,
 }: {
-  backend: Backend;
+  backend: MemoDraftBackend;
   onSaved: () => void;
   onError: (message: string) => void;
+  submitOnEnter?: boolean;
 }) {
-  const [blocks, setBlocks] = useState<Block[]>([newParagraph()]);
+  const [body, setBody] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -27,17 +25,16 @@ export function Composer({
   const uploading = useRef(false);
 
   const reset = () => {
-    setBlocks([newParagraph()]);
+    setBody("");
     setTags([]);
     setAttachments([]);
     setDraftId(null);
     setError("");
   };
 
-  const hasContent = () => {
-    const text = blocks.map((b) => (b.spans ?? []).map((s) => s.text).join("")).join("").trim();
-    return text.length > 0 || attachments.length > 0 || blocks.some((b) => b.type === "divider");
-  };
+  const hasContent = () => body.trim().length > 0 || attachments.length > 0;
+  const saveKey = submitOnEnter ? "Enter" : "Shift+Enter";
+  const newlineKey = submitOnEnter ? "Shift+Enter" : "Enter";
 
   const save = async () => {
     if (saving || uploading.current) return;
@@ -45,8 +42,8 @@ export function Composer({
     setSaving(true);
     setError("");
     try {
-      if (draftId) await backend.update(draftId, blocks, tags, false);
-      else await backend.create(blocks, tags);
+      if (draftId) await backend.update(draftId, body, tags, false);
+      else await backend.create(body, tags);
       reset();
       onSaved();
     } catch (e) {
@@ -63,18 +60,17 @@ export function Composer({
     uploading.current = true;
     setError("");
     try {
+      const payloads = await Promise.all(files.map(fileToBase64));
       let id = draftId;
       if (!id) {
-        const memo = await backend.create(blocks, tags);
+        const memo = await backend.createWithAttachments(body, tags, payloads);
         id = memo.id;
         setDraftId(id);
-      }
-      for (const file of files) {
-        const payload = await fileToBase64(file);
-        await backend.addAttachmentBase64(id, payload.name, payload.mime, payload.data);
+      } else {
+        await backend.addAttachments(id, payloads);
       }
       const memo = await backend.get(id);
-      setBlocks(memo.blocks ?? [newParagraph()]);
+      setBody(memo.body ?? "");
       setTags((memo.tags ?? []).map((t) => t.name));
       setAttachments(memo.attachments ?? []);
       onSaved();
@@ -92,7 +88,7 @@ export function Composer({
     try {
       await backend.removeAttachment(attachmentId);
       const memo = await backend.get(draftId);
-      setBlocks(memo.blocks ?? [newParagraph()]);
+      setBody(memo.body ?? "");
       setAttachments(memo.attachments ?? []);
       onSaved();
     } catch (e) {
@@ -104,20 +100,20 @@ export function Composer({
     <div className="composer">
       <MarkdownEditor
         backend={backend}
-        blocks={blocks}
+        body={body}
         tags={tags}
         attachments={attachments}
-        onChange={setBlocks}
+        onBodyChange={setBody}
         onTagsChange={setTags}
         onSubmit={() => void save()}
-        submitOnEnter
+        submitOnEnter={submitOnEnter}
         placeholder="记录此刻的想法… 支持 Markdown"
         onAddAttachment={(files) => void addFiles(files)}
         onRemoveAttachment={(id) => void removeAttachment(id)}
       />
       <div className="composer-footer">
         <span className="composer-hint">
-          {draftId ? "草稿已保存，继续编辑后按 Enter 更新" : "Enter 保存 · Shift+Enter 换行"}
+          {draftId ? `草稿已保存，继续编辑后按 ${saveKey} 更新` : `${saveKey} 保存 · ${newlineKey} 换行`}
         </span>
         {error && <span className="inline-error">{error}</span>}
         <button type="button" className="send-button" onClick={() => void save()} disabled={saving} aria-label="保存笔记">

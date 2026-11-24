@@ -36,5 +36,12 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     css: false,
+    server: {
+      deps: {
+        // The package ships extensionless internal ESM imports, which Node
+        // refuses to resolve when Vitest externalizes the dependency.
+        inline: ["@atomic-editor/editor"],
+      },
+    },
   },
 });

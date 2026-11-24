@@ -161,6 +161,34 @@ func TestParseImageWithEmptyAlt(t *testing.T) {
 	}
 }
 
+func TestFenceVariantsAndHeadingLevels(t *testing.T) {
+	src := "~~~go\nfmt.Println()\n~~~\n\n````md\n```\n````\n\n```\nunclosed"
+	blocks := Parse(src)
+	if len(blocks) != 3 {
+		t.Fatalf("block count = %d, want 3: %+v", len(blocks), blocks)
+	}
+	if blocks[0].Language != "go" || blocks[0].PlainText() != "fmt.Println()" {
+		t.Errorf("tilde fence = %+v", blocks[0])
+	}
+	if blocks[1].Language != "md" || blocks[1].PlainText() != "```" {
+		t.Errorf("long backtick fence = %+v", blocks[1])
+	}
+	if blocks[2].Language != "" || blocks[2].PlainText() != "unclosed" {
+		t.Errorf("unclosed fence = %+v", blocks[2])
+	}
+
+	headings := Parse("#### four\n\n###### six\n\n>tight")
+	if headings[0].Level != 4 || headings[1].Level != 6 {
+		t.Fatalf("heading levels = %d, %d", headings[0].Level, headings[1].Level)
+	}
+	if headings[2].Type != domain.BlockQuote || headings[2].PlainText() != "tight" {
+		t.Fatalf("tight quote = %+v", headings[2])
+	}
+	if got := Serialize(headings); got != "#### four\n\n###### six\n\n> tight" {
+		t.Fatalf("serialized = %q", got)
+	}
+}
+
 func contains(haystack, needle string) bool {
 	return len(haystack) >= len(needle) && (haystack == needle || indexOf(haystack, needle) >= 0)
 }

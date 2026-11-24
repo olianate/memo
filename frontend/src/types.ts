@@ -8,7 +8,8 @@ export type BlockType =
   | "code"
   | "divider"
   | "image"
-  | "file";
+  | "file"
+  | "table";
 
 export interface Span {
   text: string;
@@ -28,6 +29,7 @@ export interface Block {
   spans?: Span[] | null;
   attachment_id?: string;
   alt?: string;
+  rows?: string[][];
 }
 
 export interface Tag {
@@ -51,6 +53,12 @@ export interface Attachment {
   notion_file_id?: string;
 }
 
+export interface AttachmentPayload {
+  name: string;
+  mime: string;
+  data: string;
+}
+
 export interface Memo {
   id: string;
   created_at: string;
@@ -65,7 +73,7 @@ export interface Memo {
   notion_synced_at?: string;
   last_hydrated_at?: string;
   sync_error?: string;
-  blocks: Block[] | null;
+  body: string;
   tags: Tag[] | null;
   attachments: Attachment[] | null;
   day: string;
@@ -99,6 +107,7 @@ export interface SearchResult {
 export interface Settings {
   theme: "light" | "dark" | "system";
   hotkey: string;
+  submit_on_enter: boolean;
   start_at_login: boolean;
   retention_days: number;
   immediate_eviction: boolean;

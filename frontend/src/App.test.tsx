@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "./App";
 import { demoBackend } from "./demoBackend";
 import { memo } from "./test/fixtures";
+import { setEditorBody } from "./test/editor";
 import type { Backend } from "./backend";
 import type { SyncStatus } from "./types";
 
@@ -10,8 +11,8 @@ describe("App", () => {
   it("reloads the timeline after a save", async () => {
     let rows = [] as ReturnType<typeof memo>[];
     const list = vi.fn(async () => rows);
-    const create = vi.fn(async (blocks: any, tags: any) => {
-      const saved = memo({ id: "m-new", day: "2026-11-21", blocks, tags: tags.map((name: string) => ({ id: name, name, normalized: name, count: 0 })) });
+    const create = vi.fn(async (body: any, tags: any) => {
+      const saved = memo({ id: "m-new", day: "2026-11-21", body, tags: tags.map((name: string) => ({ id: name, name, normalized: name, count: 0 })) });
       rows = [saved];
       return saved;
     });
@@ -23,12 +24,7 @@ describe("App", () => {
     };
     render(<App backend={backend} />);
     await screen.findByText("这里还很安静");
-    const editor = document.querySelector<HTMLElement>(".ed-input");
-    expect(editor).not.toBeNull();
-    if (editor) {
-      editor.textContent = "新笔记";
-      fireEvent.input(editor);
-    }
+    setEditorBody("新笔记");
     fireEvent.click(screen.getByRole("button", { name: "保存笔记" }));
     await waitFor(() => expect(create).toHaveBeenCalled());
     expect(await screen.findByText("新笔记")).toBeInTheDocument();
@@ -36,10 +32,7 @@ describe("App", () => {
   });
 
   it("empties the trash from the trash view", async () => {
-    const trashed = await demoBackend.create(
-      [{ id: "b-trash", type: "paragraph", spans: [{ text: "trash me" }] }],
-      [],
-    );
+    const trashed = await demoBackend.create("trash me", []);
     await demoBackend.remove(trashed.id);
     const emptyTrash = vi.fn(async () => {
       const count = await demoBackend.emptyTrash();

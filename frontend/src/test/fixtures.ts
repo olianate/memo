@@ -9,7 +9,7 @@ export function memo(overrides: Partial<Memo> & { id: string; day: string }): Me
     deleted: false,
     keep_local: false,
     local_state: "present",
-    blocks: [{ id: "b1", type: "paragraph", spans: [{ text: "示例正文" }] }],
+    body: "示例正文",
     tags: [],
     attachments: [],
     ...overrides,

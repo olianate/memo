@@ -16,7 +16,7 @@ an optional long-term archive.
 
 - Write immediately: `Enter` saves, `Shift+Enter` adds a paragraph
 - Global quick capture with `Ctrl+Shift+Space`, `Esc` hides it
-- Markdown blocks, tags, attachments and local search
+- Markdown live preview, tags, attachments and local search
 - Trash, tray-first window and single instance
 - Optional Notion archive with schema checks, sync pause and body retention
 

@@ -12,18 +12,22 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as domain$0 from "../domain/models.js";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
 /**
  * AddAttachmentBase64 ingests a file from the webview. It appends the matching
- * attachment block to the memo so the change is durable immediately.
+ * attachment reference to the Markdown body so the change is durable immediately.
  */
 export function AddAttachmentBase64(memoID: string, name: string, mime: string, data: string): $CancellablePromise<$models.AttachmentDTO> {
     return $Call.ByID(3848189305, memoID, name, mime, data);
+}
+
+/**
+ * AddAttachments ingests several files as one revision and one sync outbox
+ * entry, and returns the attachments it added.
+ */
+export function AddAttachments(memoID: string, files: $models.AttachmentPayload[] | null): $CancellablePromise<$models.AttachmentDTO[] | null> {
+    return $Call.ByID(1712028319, memoID, files);
 }
 
 /**
@@ -48,10 +52,18 @@ export function Counts(): $CancellablePromise<$models.CountsDTO> {
 }
 
 /**
- * Create stores a new memo and returns it.
+ * Create stores a new memo body and returns it.
  */
-export function Create(blocks: domain$0.Block[] | null, tags: string[] | null): $CancellablePromise<$models.MemoDTO> {
-    return $Call.ByID(3023508364, blocks, tags);
+export function Create(body: string, tags: string[] | null): $CancellablePromise<$models.MemoDTO> {
+    return $Call.ByID(3023508364, body, tags);
+}
+
+/**
+ * CreateWithAttachments stores a new memo and its files as one revision, so a
+ * capture with images never passes through an empty draft memo.
+ */
+export function CreateWithAttachments(body: string, tags: string[] | null, files: $models.AttachmentPayload[] | null): $CancellablePromise<$models.MemoDTO> {
+    return $Call.ByID(2825417766, body, tags, files);
 }
 
 /**
@@ -100,13 +112,6 @@ export function OpenAttachment(id: string): $CancellablePromise<void> {
 }
 
 /**
- * ParseMarkdown is the raw-editor → AST path. The canonical body stays blocks.
- */
-export function ParseMarkdown(source: string): $CancellablePromise<domain$0.Block[] | null> {
-    return $Call.ByID(3521379882, source);
-}
-
-/**
  * Purge permanently removes one memo from the local trash. A Notion page is
  * queued for a tombstone so a later pull cannot resurrect it.
  */
@@ -129,13 +134,6 @@ export function Restore(id: string): $CancellablePromise<$models.MemoDTO> {
 }
 
 /**
- * SerializeMarkdown is the AST → raw-editor path.
- */
-export function SerializeMarkdown(blocks: domain$0.Block[] | null): $CancellablePromise<string> {
-    return $Call.ByID(2767675707, blocks);
-}
-
-/**
  * SetKeepLocal pins a memo against retention eviction.
  */
 export function SetKeepLocal(id: string, keep: boolean): $CancellablePromise<void> {
@@ -143,9 +141,9 @@ export function SetKeepLocal(id: string, keep: boolean): $CancellablePromise<voi
 }
 
 /**
- * Update edits a memo. An evicted body is hydrated first; if that is not
+ * Update edits a memo body. An evicted body is hydrated first; if that is not
  * possible the edit is refused rather than overwriting the archive.
  */
-export function Update(id: string, blocks: domain$0.Block[] | null, tags: string[] | null, keepLocal: boolean): $CancellablePromise<$models.MemoDTO> {
-    return $Call.ByID(1044183081, id, blocks, tags, keepLocal);
+export function Update(id: string, body: string, tags: string[] | null, keepLocal: boolean): $CancellablePromise<$models.MemoDTO> {
+    return $Call.ByID(1044183081, id, body, tags, keepLocal);
 }

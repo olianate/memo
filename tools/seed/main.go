@@ -15,6 +15,7 @@ import (
 
 	"github.com/olianate/memo/internal/config"
 	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/domain/markdown"
 	"github.com/olianate/memo/internal/platform"
 	"github.com/olianate/memo/internal/store"
 )
@@ -119,7 +120,7 @@ func main() {
 	}
 	for _, item := range seed {
 		if _, err := st.CreateMemo(ctx, store.MemoInput{
-			CreatedAt: item.at, UpdatedAt: item.at, Blocks: item.blocks, Tags: item.tags,
+			CreatedAt: item.at, UpdatedAt: item.at, Body: markdown.Serialize(item.blocks), Tags: item.tags,
 		}); err != nil {
 			log.Fatal(err)
 		}

@@ -15,11 +15,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/olianate/memo/internal/archive"
 	"github.com/olianate/memo/internal/attachments"
 	"github.com/olianate/memo/internal/config"
 	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/memoedit"
 	"github.com/olianate/memo/internal/notion"
 	"github.com/olianate/memo/internal/notion/fake"
+	"github.com/olianate/memo/internal/presence"
 	"github.com/olianate/memo/internal/search"
 	"github.com/olianate/memo/internal/stats"
 	"github.com/olianate/memo/internal/store"
@@ -81,6 +84,14 @@ type testEnv struct {
 	dir      string
 }
 
+// useGateway swaps the Notion client behind the onboarding adapter.
+func (e *testEnv) useGateway(gw notion.Gateway) {
+	e.sync.link = archive.New(e.cfg, e.secrets, e.store,
+		func(string) notion.Gateway { return gw },
+		e.engine.Wake, e.sync.emitStatus, e.sync.log,
+	)
+}
+
 func newServiceEnv(t *testing.T) *testEnv {
 	t.Helper()
 	dir := t.TempDir()
@@ -97,9 +108,12 @@ func newServiceEnv(t *testing.T) *testEnv {
 	engine.SetDeviceID("dev-test")
 	hooks := &testHooks{}
 	emit := func(string, any) {}
+	keeper := presence.New(st, att, engine.Hydrate, nil, emit)
+	engine.SetPresence(keeper)
+	editor := memoedit.New(st, att, keeper, func(string) {})
 	return &testEnv{
 		store: st, cfg: cfg, dir: dir, secrets: kc, hooks: hooks, engine: engine,
-		memos:    NewMemoService(st, engine, att, emit),
+		memos:    NewMemoService(st, att, emit, editor, keeper),
 		tags:     NewTagService(st, emit),
 		search:   NewSearchService(search.New(st)),
 		stats:    NewStatsService(stats.New(st)),
@@ -108,32 +122,41 @@ func newServiceEnv(t *testing.T) *testEnv {
 	}
 }
 
-func paragraph(text string) []domain.Block {
-	return []domain.Block{{ID: domain.NewID(), Type: domain.BlockParagraph, Spans: []domain.Span{{Text: text}}}}
+func TestSettingsSubmitOnEnter(t *testing.T) {
+	e := newServiceEnv(t)
+	if !e.settings.Get().SubmitOnEnter {
+		t.Fatal("default should submit on Enter")
+	}
+	if err := e.settings.SetSubmitOnEnter(false); err != nil {
+		t.Fatal(err)
+	}
+	if e.settings.Get().SubmitOnEnter {
+		t.Fatal("setting was not persisted")
+	}
 }
 
 func TestMemoLifecycle(t *testing.T) {
 	e := newServiceEnv(t)
-	created, err := e.memos.Create(paragraph("hello"), []string{"work"})
+	created, err := e.memos.Create("hello", []string{"work"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.Day == "" || len(created.Blocks) != 1 || len(created.Tags) != 1 {
+	if created.Day == "" || created.Body != "hello" || len(created.Tags) != 1 {
 		t.Fatalf("created = %+v", created)
 	}
 	list, err := e.memos.List(FilterDTO{})
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list = %+v %v", list, err)
 	}
-	updated, err := e.memos.Update(created.ID, paragraph("edited"), []string{"life"}, true)
+	updated, err := e.memos.Update(created.ID, "edited", []string{"life"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Revision != 2 || updated.Blocks[0].PlainText() != "edited" || !updated.KeepLocal {
+	if updated.Revision != 2 || updated.Body != "edited" || !updated.KeepLocal {
 		t.Fatalf("updated = %+v", updated)
 	}
 	got, err := e.memos.Get(created.ID)
-	if err != nil || got.Blocks[0].PlainText() != "edited" {
+	if err != nil || got.Body != "edited" {
 		t.Fatalf("get = %+v %v", got, err)
 	}
 	if err := e.memos.Delete(created.ID); err != nil {
@@ -160,8 +183,8 @@ func TestMemoLifecycle(t *testing.T) {
 func TestPurgeMemoAndEmptyTrash(t *testing.T) {
 	e := newServiceEnv(t)
 	ctx := context.Background()
-	first, _ := e.memos.Create(paragraph("first"), nil)
-	second, _ := e.memos.Create(paragraph("second"), nil)
+	first, _ := e.memos.Create("first", nil)
+	second, _ := e.memos.Create("second", nil)
 	if err := e.store.SetNotionPageID(ctx, first.ID, "page-first"); err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +212,7 @@ func TestPurgeMemoAndEmptyTrash(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A live memo cannot be purged directly.
-	third, _ := e.memos.Create(paragraph("third"), nil)
+	third, _ := e.memos.Create("third", nil)
 	if err := e.memos.Purge(third.ID); err == nil {
 		t.Fatal("live memo was purged")
 	}
@@ -224,7 +247,7 @@ func testPNG(t *testing.T) []byte {
 
 func TestAttachmentAddAppendsBlockAndRemove(t *testing.T) {
 	e := newServiceEnv(t)
-	memo, _ := e.memos.Create(paragraph("with image"), nil)
+	memo, _ := e.memos.Create("with image", nil)
 	encoded := base64.StdEncoding.EncodeToString(testPNG(t))
 	att, err := e.memos.AddAttachmentBase64(memo.ID, "shot.png", "image/png", encoded)
 	if err != nil {
@@ -234,8 +257,8 @@ func TestAttachmentAddAppendsBlockAndRemove(t *testing.T) {
 	if len(got.Attachments) != 1 || got.Attachments[0].ID != att.ID {
 		t.Fatalf("attachments = %+v", got.Attachments)
 	}
-	if len(got.Blocks) != 2 || got.Blocks[1].AttachmentID != att.ID || got.Blocks[1].Type != domain.BlockImage {
-		t.Fatalf("blocks = %+v", got.Blocks)
+	if !strings.Contains(got.Body, "attachment://"+att.ID) || !strings.HasPrefix(got.Body, "with image") {
+		t.Fatalf("body = %q", got.Body)
 	}
 	thumb, err := e.memos.AttachmentThumb(att.ID)
 	if err != nil || thumb == "" {
@@ -245,15 +268,47 @@ func TestAttachmentAddAppendsBlockAndRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 	after, _ := e.memos.Get(memo.ID)
-	if len(after.Attachments) != 0 || len(after.Blocks) != 1 {
+	if len(after.Attachments) != 0 || strings.Contains(after.Body, "attachment://") || !strings.HasPrefix(after.Body, "with image") {
 		t.Fatalf("after remove = %+v", after)
+	}
+}
+
+func TestBatchAttachmentsAreOneRevision(t *testing.T) {
+	e := newServiceEnv(t)
+	encoded := base64.StdEncoding.EncodeToString(testPNG(t))
+	created, err := e.memos.CreateWithAttachments("two files", nil, []AttachmentPayload{
+		{Name: "one.png", MIME: "image/png", Data: encoded},
+		{Name: "two.txt", MIME: "text/plain", Data: base64.StdEncoding.EncodeToString([]byte("hello"))},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Revision != 1 || len(created.Attachments) != 2 {
+		t.Fatalf("created = %+v", created)
+	}
+	added, err := e.memos.AddAttachments(created.ID, []AttachmentPayload{
+		{Name: "three.txt", MIME: "text/plain", Data: base64.StdEncoding.EncodeToString([]byte("world"))},
+		{Name: "four.txt", MIME: "text/plain", Data: base64.StdEncoding.EncodeToString([]byte("again"))},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(added) != 2 {
+		t.Fatalf("added = %+v", added)
+	}
+	got, _ := e.memos.Get(created.ID)
+	if got.Revision != 2 || len(got.Attachments) != 4 {
+		t.Fatalf("after add = %+v", got)
+	}
+	if _, err := e.memos.AddAttachments(created.ID, []AttachmentPayload{{Name: "bad", Data: "not base64"}}); err == nil {
+		t.Fatal("bad payload was accepted")
 	}
 }
 
 func TestTagsRenameMergeAndSearch(t *testing.T) {
 	e := newServiceEnv(t)
-	first, _ := e.memos.Create(paragraph("alpha work note"), []string{"work", "job"})
-	_, _ = e.memos.Create(paragraph("beta life note"), []string{"life"})
+	first, _ := e.memos.Create("alpha work note", []string{"work", "job"})
+	_, _ = e.memos.Create("beta life note", []string{"life"})
 	tags, err := e.tags.List()
 	if err != nil || len(tags) != 3 {
 		t.Fatalf("tags = %+v %v", tags, err)
@@ -331,7 +386,7 @@ func TestSettingsApplyAndBackup(t *testing.T) {
 	if e.hooks.hotkey != "CmdOrCtrl+Alt+Space" || !e.hooks.login {
 		t.Fatalf("hooks = %+v", e.hooks)
 	}
-	_, _ = e.memos.Create(paragraph("backup me"), nil)
+	_, _ = e.memos.Create("backup me", nil)
 	backup, err := e.settings.ExportBackup()
 	if err != nil {
 		t.Fatal(err)
@@ -428,7 +483,7 @@ func TestSyncResolveArchiveTargetAcceptsLinks(t *testing.T) {
 			notion.TitlePropertyName: "title",
 		},
 	})
-	e.sync.client = func(token string) notion.Gateway { return gw }
+	e.useGateway(gw)
 
 	target, err := e.sync.ResolveArchiveTarget("tok", "https://www.notion.so/archive-0123456789abcdef0123456789abcdef?pvs=4")
 	if err != nil {
@@ -461,7 +516,7 @@ func TestSyncResolveArchiveTargetAcceptsLinks(t *testing.T) {
 
 func TestStatsDashboardBoundary(t *testing.T) {
 	e := newServiceEnv(t)
-	_, _ = e.memos.Create(paragraph("hello 世界"), []string{"work"})
+	_, _ = e.memos.Create("hello 世界", []string{"work"})
 	month := time.Now().Format("2006-01")
 	dashboard, err := e.stats.Dashboard(month)
 	if err != nil {
@@ -487,8 +542,8 @@ func TestSyncConnectWithFakeWorkspace(t *testing.T) {
 		ID: "abcdef0123456789abcdef0123456789", DatabaseID: "11112222333344445555666677778888",
 		Title: "Shared database", PropertyTypes: map[string]string{notion.TitlePropertyName: "title"},
 	})
-	e.sync.client = func(token string) notion.Gateway { return gw }
-	if _, err := e.memos.Create(paragraph("local first"), nil); err != nil {
+	e.useGateway(gw)
+	if _, err := e.memos.Create("local first", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.sync.ValidateToken("tok"); err != nil {
@@ -545,7 +600,7 @@ func TestSyncConnectUsesSharedDatabase(t *testing.T) {
 		Title:         "已有 memo 数据库",
 		PropertyTypes: map[string]string{notion.TitlePropertyName: "title"},
 	})
-	e.sync.client = func(token string) notion.Gateway { return gw }
+	e.useGateway(gw)
 
 	list, err := e.sync.ParentPages("tok", "")
 	if err != nil {
@@ -628,7 +683,7 @@ func TestSyncConnectSharedDatabaseRejectsTypeConflict(t *testing.T) {
 			notion.PropTags:          "rich_text",
 		},
 	})
-	e.sync.client = func(token string) notion.Gateway { return gw }
+	e.useGateway(gw)
 	preview, err := e.sync.PreviewArchiveDatabase("tok", dsID)
 	if err != nil {
 		t.Fatal(err)
@@ -658,7 +713,7 @@ func TestSyncConnectReadySharedDatabaseNeedsNoConfirmation(t *testing.T) {
 		ID: dsID, DatabaseID: "11112222333344445555666677778888",
 		Title: "完整数据库", PropertyTypes: propertyTypes,
 	})
-	e.sync.client = func(token string) notion.Gateway { return gw }
+	e.useGateway(gw)
 	preview, err := e.sync.PreviewArchiveDatabase("tok", dsID)
 	if err != nil {
 		t.Fatal(err)

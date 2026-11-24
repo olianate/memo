@@ -17,6 +17,8 @@ import (
 
 	"github.com/olianate/memo/internal/attachments"
 	"github.com/olianate/memo/internal/config"
+	"github.com/olianate/memo/internal/memoedit"
+	"github.com/olianate/memo/internal/presence"
 	"github.com/olianate/memo/internal/search"
 	"github.com/olianate/memo/internal/services"
 	"github.com/olianate/memo/internal/store"
@@ -45,9 +47,12 @@ func newTestService(t *testing.T) *Service {
 	att := attachments.New(st, cfg, dir)
 	engine := syncengine.New(st, cfg, testSecrets{}, att)
 	engine.SetDeviceID("dev-mcp")
-	memo := services.NewMemoService(st, engine, att, func(string, any) {})
+	keeper := presence.New(st, att, engine.Hydrate, nil, nil)
+	engine.SetPresence(keeper)
+	editor := memoedit.New(st, att, keeper, func(string) {})
+	memo := services.NewMemoService(st, att, func(string, any) {}, editor, keeper)
 	searchSvc := services.NewSearchService(search.New(st))
-	return New(memo, searchSvc)
+	return New(memo, editor, searchSvc)
 }
 
 func structured[T any](t *testing.T, result *mcp.CallToolResult) T {

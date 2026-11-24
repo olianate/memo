@@ -53,12 +53,29 @@ func New(st *store.Store, cfg *config.Store, dataDir string) *Service {
 	return &Service{store: st, cfg: cfg, dataDir: dataDir}
 }
 
-// Add ingests a picked, pasted or dropped file for a memo. Images are resized
-// and re-encoded; other files are stored as-is up to the workspace limit.
+// Add ingests a picked, pasted or dropped file for an existing memo and inserts
+// its row. Images are resized and re-encoded; other files are stored as-is up to
+// the workspace limit.
 func (s *Service) Add(ctx context.Context, memoID, filename, mime string, data []byte) (*domain.Attachment, error) {
 	if _, err := s.store.GetMemo(ctx, memoID); err != nil {
 		return nil, fmt.Errorf("memo not found")
 	}
+	att, err := s.Stage(ctx, memoID, filename, mime, data)
+	if err != nil {
+		return nil, err
+	}
+	created, err := s.store.CreateAttachment(ctx, *att)
+	if err != nil {
+		_ = s.DeleteFiles(ctx, *att)
+		return nil, err
+	}
+	return created, nil
+}
+
+// Stage ingests a file and writes its bytes without inserting the row. The
+// caller owns the row, so a new memo and its files can commit in one
+// transaction.
+func (s *Service) Stage(ctx context.Context, memoID, filename, mime string, data []byte) (*domain.Attachment, error) {
 	if len(data) == 0 {
 		return nil, errors.New("file is empty")
 	}
@@ -76,13 +93,13 @@ func (s *Service) Add(ctx context.Context, memoID, filename, mime string, data [
 		if max > 0 && int64(len(data)) > max {
 			return nil, fmt.Errorf("image is still %s after compression; the upload limit is %s", humanBytes(int64(len(data))), humanBytes(max))
 		}
-		return s.save(ctx, memoID, filename, "image/jpeg", kind, data, width, height, true)
+		return s.writeFiles(memoID, filename, "image/jpeg", kind, data, width, height, true)
 	}
 	max := s.effectiveLimit(ctx)
 	if max > 0 && int64(len(data)) > max {
 		return nil, fmt.Errorf("file is %s; the upload limit is %s", humanBytes(int64(len(data))), humanBytes(max))
 	}
-	return s.save(ctx, memoID, filename, mime, kind, data, 0, 0, false)
+	return s.writeFiles(memoID, filename, mime, kind, data, 0, 0, false)
 }
 
 // SaveRemote implements sync.AttachmentImporter for hydrated or pulled files.
@@ -102,6 +119,21 @@ func (s *Service) SaveRemote(ctx context.Context, memoID, filename, mime string,
 }
 
 func (s *Service) save(ctx context.Context, memoID, filename, mime string, kind domain.AttachmentKind, data []byte, width, height int, makeThumb bool) (*domain.Attachment, error) {
+	att, err := s.writeFiles(memoID, filename, mime, kind, data, width, height, makeThumb)
+	if err != nil {
+		return nil, err
+	}
+	created, err := s.store.CreateAttachment(ctx, *att)
+	if err != nil {
+		_ = s.DeleteFiles(ctx, *att)
+		return nil, err
+	}
+	return created, nil
+}
+
+// writeFiles stores bytes and the optional thumbnail and returns the row the
+// caller should insert.
+func (s *Service) writeFiles(memoID, filename, mime string, kind domain.AttachmentKind, data []byte, width, height int, makeThumb bool) (*domain.Attachment, error) {
 	if !domain.IsSafeID(memoID) {
 		return nil, errors.New("invalid memo id")
 	}
@@ -126,19 +158,11 @@ func (s *Service) save(ctx context.Context, memoID, filename, mime string, kind 
 		}
 	}
 	sum := sha256.Sum256(data)
-	att, err := s.store.CreateAttachment(ctx, domain.Attachment{
+	return &domain.Attachment{
 		ID: id, MemoID: memoID, Kind: kind, OriginalName: name,
 		LocalPath: localPath, ThumbPath: thumbPath, MIME: mime, Bytes: int64(len(data)),
 		Width: width, Height: height, SHA256: hex.EncodeToString(sum[:]),
-	})
-	if err != nil {
-		_ = os.Remove(localPath)
-		if thumbPath != "" {
-			_ = os.Remove(thumbPath)
-		}
-		return nil, err
-	}
-	return att, nil
+	}, nil
 }
 
 // DeleteFiles removes an attachment's bytes and thumbnail (eviction or delete).

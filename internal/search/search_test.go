@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olianate/memo/internal/domain"
 	"github.com/olianate/memo/internal/store"
 )
 
@@ -20,16 +19,12 @@ func testStore(t *testing.T) *store.Store {
 	return s
 }
 
-func paragraph(text string) []domain.Block {
-	return []domain.Block{{ID: domain.NewID(), Type: domain.BlockParagraph, Spans: []domain.Span{{Text: text}}}}
-}
-
 func TestChineseAndEnglishQueries(t *testing.T) {
 	ctx := context.Background()
 	st := testStore(t)
 	svc := New(st)
-	_, _ = st.CreateMemo(ctx, store.MemoInput{Blocks: paragraph("今天开会讨论产品路线图"), Tags: []string{"工作"}})
-	_, _ = st.CreateMemo(ctx, store.MemoInput{Blocks: paragraph("hello world from the memo app")})
+	_, _ = st.CreateMemo(ctx, store.MemoInput{Body: "今天开会讨论产品路线图", Tags: []string{"工作"}})
+	_, _ = st.CreateMemo(ctx, store.MemoInput{Body: "hello world from the memo app"})
 
 	results, err := svc.Search(ctx, Options{Query: "产品路线"})
 	if err != nil {
@@ -48,7 +43,7 @@ func TestShortQueryFallsBackToLike(t *testing.T) {
 	ctx := context.Background()
 	st := testStore(t)
 	svc := New(st)
-	_, _ = st.CreateMemo(ctx, store.MemoInput{Blocks: paragraph("今天开会讨论产品路线图")})
+	_, _ = st.CreateMemo(ctx, store.MemoInput{Body: "今天开会讨论产品路线图"})
 	results, err := svc.Search(ctx, Options{Query: "开会"})
 	if err != nil {
 		t.Fatal(err)
@@ -65,9 +60,9 @@ func TestFiltersAndDeleted(t *testing.T) {
 	ctx := context.Background()
 	st := testStore(t)
 	svc := New(st)
-	old, _ := st.CreateMemo(ctx, store.MemoInput{Blocks: paragraph("alpha note"), Tags: []string{"work"}})
-	_, _ = st.CreateMemo(ctx, store.MemoInput{Blocks: paragraph("alpha other"), Tags: []string{"life"}})
-	_, _ = st.CreateMemo(ctx, store.MemoInput{Blocks: paragraph("beta note"), Tags: []string{"work"}})
+	old, _ := st.CreateMemo(ctx, store.MemoInput{Body: "alpha note", Tags: []string{"work"}})
+	_, _ = st.CreateMemo(ctx, store.MemoInput{Body: "alpha other", Tags: []string{"life"}})
+	_, _ = st.CreateMemo(ctx, store.MemoInput{Body: "beta note", Tags: []string{"work"}})
 
 	results, _ := svc.Search(ctx, Options{Query: "alpha", Tag: "work"})
 	if len(results) != 1 || results[0].Memo.ID != old.ID {
@@ -91,7 +86,7 @@ func TestRebuildIndex(t *testing.T) {
 	ctx := context.Background()
 	st := testStore(t)
 	svc := New(st)
-	_, _ = st.CreateMemo(ctx, store.MemoInput{Blocks: paragraph("rebuild me later")})
+	_, _ = st.CreateMemo(ctx, store.MemoInput{Body: "rebuild me later"})
 	if err := st.RebuildIndex(ctx); err != nil {
 		t.Fatal(err)
 	}

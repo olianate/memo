@@ -30,6 +30,23 @@ export function formatMonth(month: string): string {
   return `${year}年${Number(m)}月`;
 }
 
+export function countWords(text: string): number {
+  let count = 0;
+  let inWord = false;
+  for (const ch of text) {
+    if (/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(ch)) {
+      count += 1;
+      inWord = false;
+    } else if (/[\p{L}\p{N}]/u.test(ch)) {
+      if (!inWord) count += 1;
+      inWord = true;
+    } else {
+      inWord = false;
+    }
+  }
+  return count;
+}
+
 export function humanBytes(bytes: number): string {
   if (!bytes) return "0 B";
   const units = ["B", "KB", "MB", "GB"];

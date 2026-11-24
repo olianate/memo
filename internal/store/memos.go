@@ -21,10 +21,13 @@ type MemoInput struct {
 	ID            string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
-	Blocks        []domain.Block
+	Body          string
 	Tags          []string
 	AttachmentIDs []string
-	KeepLocal     bool
+	// Attachments are rows whose bytes are already on disk. They are inserted in
+	// the same transaction as the memo so a new memo with files is one revision.
+	Attachments []domain.Attachment
+	KeepLocal   bool
 }
 
 // CreateMemo writes a memo, its tags, index row and outbox row atomically.
@@ -39,19 +42,14 @@ func (s *Store) CreateMemo(ctx context.Context, in MemoInput) (*domain.Memo, err
 	if in.UpdatedAt.IsZero() {
 		in.UpdatedAt = in.CreatedAt
 	}
-	bodyJSON, err := domain.MarshalBlocks(in.Blocks)
-	if err != nil {
-		return nil, err
-	}
-	bodyText := domain.Text(in.Blocks)
-	hash := domain.HashContent(in.Blocks, in.Tags)
-	err = withTx(ctx, s.db, func(tx *sql.Tx) error {
+	derived := deriveBody(in.Body, in.Tags)
+	err := withTx(ctx, s.db, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO memos
-			(id, created_at, updated_at, revision, body_json, body_text, snippet, keep_local, local_state, content_hash, block_stats)
+			(id, created_at, updated_at, revision, body_md, body_text, snippet, keep_local, local_state, content_hash, block_stats)
 			VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-			in.ID, toMS(in.CreatedAt), toMS(in.UpdatedAt), 1, bodyJSON, bodyText,
-			domain.Snippet(bodyText, 200), boolInt(in.KeepLocal), string(domain.LocalPresent), hash,
-			domain.MarshalBlockStats(domain.AnalyzeBlocks(in.Blocks)))
+			in.ID, toMS(in.CreatedAt), toMS(in.UpdatedAt), 1, in.Body, derived.Text,
+			derived.Snippet, boolInt(in.KeepLocal), string(domain.LocalPresent), derived.Hash,
+			domain.MarshalBlockStats(derived.Stats))
 		if err != nil {
 			return err
 		}
@@ -61,7 +59,16 @@ func (s *Store) CreateMemo(ctx context.Context, in MemoInput) (*domain.Memo, err
 		if err := attachToMemo(ctx, tx, in.ID, in.AttachmentIDs); err != nil {
 			return err
 		}
-		if err := indexMemo(ctx, tx, in.ID, bodyText, in.Tags); err != nil {
+		for _, att := range in.Attachments {
+			att.MemoID = in.ID
+			if att.ID == "" {
+				att.ID = domain.NewID()
+			}
+			if err := insertAttachment(ctx, tx, att); err != nil {
+				return err
+			}
+		}
+		if err := indexMemo(ctx, tx, in.ID, derived.Text, in.Tags); err != nil {
 			return err
 		}
 		return enqueueTx(ctx, tx, in.ID, domain.OutboxUpsert, 1, time.Now().UTC())
@@ -73,45 +80,143 @@ func (s *Store) CreateMemo(ctx context.Context, in MemoInput) (*domain.Memo, err
 }
 
 // UpdateMemo edits the body/tags of a memo and bumps its revision.
-func (s *Store) UpdateMemo(ctx context.Context, id string, blocks []domain.Block, tags []string, keepLocal *bool) (*domain.Memo, error) {
-	bodyJSON, err := domain.MarshalBlocks(blocks)
-	if err != nil {
-		return nil, err
-	}
-	bodyText := domain.Text(blocks)
-	hash := domain.HashContent(blocks, tags)
-	now := time.Now().UTC()
-	err = withTx(ctx, s.db, func(tx *sql.Tx) error {
-		var revision int64
-		if err := tx.QueryRowContext(ctx, `SELECT revision FROM memos WHERE id=?`, id).Scan(&revision); err != nil {
-			if err == sql.ErrNoRows {
-				return domain.ErrNotFound
-			}
-			return err
-		}
-		revision++
-		blockStats := domain.MarshalBlockStats(domain.AnalyzeBlocks(blocks))
-		q := `UPDATE memos SET body_json=?, body_text=?, snippet=?, updated_at=?, revision=?, content_hash=?, block_stats=?, local_state=?, sync_error='' WHERE id=?`
-		args := []any{bodyJSON, bodyText, domain.Snippet(bodyText, 200), toMS(now), revision, hash, blockStats, string(domain.LocalPresent), id}
-		if keepLocal != nil {
-			q = `UPDATE memos SET body_json=?, body_text=?, snippet=?, updated_at=?, revision=?, content_hash=?, block_stats=?, local_state=?, sync_error='', keep_local=? WHERE id=?`
-			args = []any{bodyJSON, bodyText, domain.Snippet(bodyText, 200), toMS(now), revision, hash, blockStats, string(domain.LocalPresent), boolInt(*keepLocal), id}
-		}
-		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
-			return err
-		}
-		if err := setMemoTags(ctx, tx, id, tags); err != nil {
-			return err
-		}
-		if err := indexMemo(ctx, tx, id, bodyText, tags); err != nil {
-			return err
-		}
-		return enqueueTx(ctx, tx, id, domain.OutboxUpsert, revision, time.Now().UTC())
+func (s *Store) UpdateMemo(ctx context.Context, id string, body string, tags []string, keepLocal *bool) (*domain.Memo, error) {
+	return s.UpdateMemoDerived(ctx, id, body, tags, keepLocal, deriveBody(body, tags))
+}
+
+// UpdateMemoDerived is UpdateMemo for callers that already parsed the body and
+// computed its projection, so an edit that validated the body does not parse it
+// twice.
+func (s *Store) UpdateMemoDerived(ctx context.Context, id string, body string, tags []string, keepLocal *bool, derived Derived) (*domain.Memo, error) {
+	err := withTx(ctx, s.db, func(tx *sql.Tx) error {
+		_, err := writeMemoTx(ctx, tx, id, memoWrite{
+			Body:         &body,
+			Tags:         tags,
+			KeepLocal:    keepLocal,
+			Derived:      &derived,
+			LocalState:   domain.LocalPresent,
+			BumpRevision: true,
+			Enqueue:      true,
+		})
+		return err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("store: update memo: %w", err)
 	}
 	return s.GetMemo(ctx, id)
+}
+
+// UpdateMemoMetadata edits tags and the pin flag while leaving the body
+// untouched, so an evicted memo stays evicted and a metadata-only edit costs no
+// re-derivation. It still bumps the revision: tags are synced properties.
+func (s *Store) UpdateMemoMetadata(ctx context.Context, id string, tags []string, keepLocal bool) (*domain.Memo, error) {
+	err := withTx(ctx, s.db, func(tx *sql.Tx) error {
+		_, err := writeMemoTx(ctx, tx, id, memoWrite{
+			Tags:         tags,
+			KeepLocal:    &keepLocal,
+			BumpRevision: true,
+			Enqueue:      true,
+		})
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: update memo metadata: %w", err)
+	}
+	return s.GetMemo(ctx, id)
+}
+
+// memoWrite is one local memo update. A nil Body leaves the body untouched;
+// otherwise Derived may carry an already-parsed projection. LocalState is empty
+// to preserve the current state or set explicitly by a body write.
+type memoWrite struct {
+	Body         *string
+	Tags         []string
+	KeepLocal    *bool
+	Derived      *Derived
+	LocalState   domain.LocalState
+	BumpRevision bool
+	Enqueue      bool
+}
+
+// writeMemoTx owns every mutable memo column and the derived search row in one
+// transaction, so update paths cannot drift on revision, hash, FTS or outbox.
+func writeMemoTx(ctx context.Context, tx *sql.Tx, id string, w memoWrite) (int64, error) {
+	var revision int64
+	var bodyMD, bodyText string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT revision, body_md, body_text FROM memos WHERE id=?`, id).
+		Scan(&revision, &bodyMD, &bodyText); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, domain.ErrNotFound
+		}
+		return 0, err
+	}
+	if w.BumpRevision {
+		revision++
+	}
+	now := time.Now().UTC()
+	if w.Body != nil {
+		bodyMD = *w.Body
+		derived := w.Derived
+		if derived == nil {
+			d := deriveBody(*w.Body, w.Tags)
+			derived = &d
+		}
+		bodyText = derived.Text
+		state := w.LocalState
+		if state == "" {
+			state = domain.LocalPresent
+		}
+		sets := []string{"body_md=?", "body_text=?", "snippet=?", "updated_at=?", "revision=?",
+			"content_hash=?", "block_stats=?", "local_state=?", "sync_error=''"}
+		args := []any{bodyMD, bodyText, derived.Snippet, toMS(now), revision, derived.Hash,
+			domain.MarshalBlockStats(derived.Stats), string(state)}
+		if w.KeepLocal != nil {
+			sets = append(sets, "keep_local=?")
+			args = append(args, boolInt(*w.KeepLocal))
+		}
+		args = append(args, id)
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE memos SET `+strings.Join(sets, ", ")+` WHERE id=?`, args...); err != nil {
+			return 0, err
+		}
+	} else {
+		sets := []string{"updated_at=?", "revision=?", "sync_error=''"}
+		args := []any{toMS(now), revision}
+		if w.LocalState != "" {
+			sets = append(sets, "local_state=?")
+			args = append(args, string(w.LocalState))
+		}
+		if w.KeepLocal != nil {
+			sets = append(sets, "keep_local=?")
+			args = append(args, boolInt(*w.KeepLocal))
+		}
+		// A metadata edit still changes the synced content hash. An evicted body
+		// has no local markdown, so its stored hash stays intact.
+		if w.Tags != nil && bodyMD != "" {
+			sets = append(sets, "content_hash=?")
+			args = append(args, domain.HashContent(bodyMD, w.Tags))
+		}
+		args = append(args, id)
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE memos SET `+strings.Join(sets, ", ")+` WHERE id=?`, args...); err != nil {
+			return 0, err
+		}
+	}
+	if w.Tags != nil {
+		if err := setMemoTags(ctx, tx, id, w.Tags); err != nil {
+			return 0, err
+		}
+	}
+	if err := indexMemo(ctx, tx, id, bodyText, w.Tags); err != nil {
+		return 0, err
+	}
+	if w.Enqueue {
+		if err := enqueueTx(ctx, tx, id, domain.OutboxUpsert, revision, now); err != nil {
+			return 0, err
+		}
+	}
+	return revision, nil
 }
 
 // SoftDelete tombstones a memo locally and queues the Status=deleted write.
@@ -257,17 +362,17 @@ func (s *Store) GetMemoByPageID(ctx context.Context, pageID string) (*domain.Mem
 	return memo, nil
 }
 
-func scanMemo(row *sql.Row) (*domain.Memo, error) {
+type memoScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanMemoRow(sc memoScanner) (*domain.Memo, error) {
 	var m domain.Memo
 	var created, updated, deleted, synced, hydrated sql.NullInt64
 	var keepLocal int
 	var state, blockStats string
-	err := row.Scan(&m.ID, &created, &updated, &m.Revision, &m.BodyJSON, &m.BodyText, &m.Snippet,
-		&deleted, &keepLocal, &state, &m.NotionPageID, &synced, &hydrated, &m.BaseRevision, &m.ContentHash, &m.SyncError, &blockStats)
-	if err == sql.ErrNoRows {
-		return nil, domain.ErrNotFound
-	}
-	if err != nil {
+	if err := sc.Scan(&m.ID, &created, &updated, &m.Revision, &m.Body, &m.BodyText, &m.Snippet,
+		&deleted, &keepLocal, &state, &m.NotionPageID, &synced, &hydrated, &m.BaseRevision, &m.ContentHash, &m.SyncError, &blockStats); err != nil {
 		return nil, err
 	}
 	m.CreatedAt = fromMS(created.Int64)
@@ -281,6 +386,14 @@ func scanMemo(row *sql.Row) (*domain.Memo, error) {
 	m.Tags = []domain.Tag{}
 	m.Attachments = []domain.Attachment{}
 	return &m, nil
+}
+
+func scanMemo(row *sql.Row) (*domain.Memo, error) {
+	m, err := scanMemoRow(row)
+	if err == sql.ErrNoRows {
+		return nil, domain.ErrNotFound
+	}
+	return m, err
 }
 
 func (s *Store) hydrateRelations(ctx context.Context, m *domain.Memo) error {
@@ -406,23 +519,11 @@ func (s *Store) ListMemos(ctx context.Context, f MemoFilter) ([]domain.Memo, err
 	defer rows.Close()
 	memos := []domain.Memo{}
 	for rows.Next() {
-		var m domain.Memo
-		var created, updated, deleted, synced, hydrated sql.NullInt64
-		var keepLocal int
-		var state, blockStats string
-		if err := rows.Scan(&m.ID, &created, &updated, &m.Revision, &m.BodyJSON, &m.BodyText, &m.Snippet,
-			&deleted, &keepLocal, &state, &m.NotionPageID, &synced, &hydrated, &m.BaseRevision, &m.ContentHash, &m.SyncError, &blockStats); err != nil {
+		m, err := scanMemoRow(rows)
+		if err != nil {
 			return nil, err
 		}
-		m.CreatedAt = fromMS(created.Int64)
-		m.UpdatedAt = fromMS(updated.Int64)
-		m.DeletedAt = msPtr(deleted)
-		m.NotionSyncedAt = msPtr(synced)
-		m.LastHydratedAt = msPtr(hydrated)
-		m.KeepLocal = keepLocal == 1
-		m.LocalState = domain.LocalState(state)
-		m.BlockStats = domain.UnmarshalBlockStats(blockStats)
-		memos = append(memos, m)
+		memos = append(memos, *m)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -486,74 +587,71 @@ func (s *Store) ClearSyncErrors(ctx context.Context) error {
 	return err
 }
 
-// SetEvicted removes the body from the local row but keeps metadata and search.
-func (s *Store) SetEvicted(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE memos SET body_json='[]', local_state=? WHERE id=?`, string(domain.LocalEvicted), id)
-	return err
-}
-
-// SetPresent marks a memo's body present again after hydration.
-func (s *Store) SetPresent(ctx context.Context, id string, hydratedAt time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE memos SET local_state=?, last_hydrated_at=? WHERE id=?`,
-		string(domain.LocalPresent), toMS(hydratedAt), id)
-	return err
+// EvictBody removes the body and every attachment's local paths in one
+// transaction while keeping metadata, tags, derived text and the search row.
+func (s *Store) EvictBody(ctx context.Context, id string, at time.Time) error {
+	return withTx(ctx, s.db, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `UPDATE memos SET body_md='', local_state=? WHERE id=?`,
+			string(domain.LocalEvicted), id); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `UPDATE attachments SET local_path='', thumb_path='', evicted_at=? WHERE memo_id=?`,
+			toMS(at), id)
+		return err
+	})
 }
 
 // RemoteMemo is a page pulled from Notion.
 type RemoteMemo struct {
-	ID          string
-	PageID      string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	Revision    int64
-	Blocks      []domain.Block
-	Tags        []string
-	Deleted     bool
-	SyncedAt    time.Time
-	KeepEvicted bool
+	ID        string
+	PageID    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Revision  int64
+	Body      string
+	Tags      []string
+	Deleted   bool
+	SyncedAt  time.Time
 }
 
 // ApplyRemote inserts or replaces local state from a Notion page. It never
 // enqueues an outbox row: the remote copy is authoritative by definition here.
-func (s *Store) ApplyRemote(ctx context.Context, r RemoteMemo) (*domain.Memo, error) {
-	bodyJSON, err := domain.MarshalBlocks(r.Blocks)
-	if err != nil {
-		return nil, err
+// The caller supplies the resulting local state; evicted keeps the body empty
+// while the remote text still feeds body_text and the search index.
+func (s *Store) ApplyRemote(ctx context.Context, r RemoteMemo, localState domain.LocalState) (*domain.Memo, error) {
+	body := r.Body
+	if localState == "" {
+		localState = domain.LocalPresent
 	}
-	bodyText := domain.Text(r.Blocks)
-	hash := domain.HashContent(r.Blocks, r.Tags)
-	blockStats := domain.MarshalBlockStats(domain.AnalyzeBlocks(r.Blocks))
+	if localState == domain.LocalEvicted {
+		body = ""
+	}
+	state := string(localState)
+	// Derived text always comes from the remote body, so an evicted memo stays
+	// searchable after a pull.
+	derived := deriveBody(r.Body, r.Tags)
 	var deletedAt any
 	if r.Deleted {
 		deletedAt = toMS(r.UpdatedAt)
 	}
-	err = withTx(ctx, s.db, func(tx *sql.Tx) error {
+	err := withTx(ctx, s.db, func(tx *sql.Tx) error {
 		var exists int
 		_ = tx.QueryRowContext(ctx, `SELECT 1 FROM memos WHERE id=?`, r.ID).Scan(&exists)
-		state := string(domain.LocalPresent)
-		if r.KeepEvicted || exists == 1 {
-			var current string
-			_ = tx.QueryRowContext(ctx, `SELECT local_state FROM memos WHERE id=?`, r.ID).Scan(&current)
-			if current == string(domain.LocalEvicted) {
-				state = current
-				bodyJSON = "[]"
-			}
-		}
 		if exists == 1 {
-			if _, err := tx.ExecContext(ctx, `UPDATE memos SET created_at=?, updated_at=?, revision=?, body_json=?, body_text=?,
+			if _, err := tx.ExecContext(ctx, `UPDATE memos SET created_at=?, updated_at=?, revision=?, body_md=?, body_text=?,
 				snippet=?, deleted_at=?, local_state=?, notion_page_id=?, notion_synced_at=?, base_revision=?,
 				content_hash=?, block_stats=?, sync_error='' WHERE id=?`,
-				toMS(r.CreatedAt), toMS(r.UpdatedAt), r.Revision, bodyJSON, bodyText, domain.Snippet(bodyText, 200),
-				deletedAt, state, r.PageID, toMS(r.SyncedAt), r.Revision, hash, blockStats, r.ID); err != nil {
+				toMS(r.CreatedAt), toMS(r.UpdatedAt), r.Revision, body, derived.Text, derived.Snippet,
+				deletedAt, state, r.PageID, toMS(r.SyncedAt), r.Revision, derived.Hash, domain.MarshalBlockStats(derived.Stats), r.ID); err != nil {
 				return err
 			}
 		} else {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO memos
-				(id, created_at, updated_at, revision, body_json, body_text, snippet, deleted_at, local_state,
+				(id, created_at, updated_at, revision, body_md, body_text, snippet, deleted_at, local_state,
 				 notion_page_id, notion_synced_at, base_revision, content_hash, block_stats)
 				VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-				r.ID, toMS(r.CreatedAt), toMS(r.UpdatedAt), r.Revision, bodyJSON, bodyText, domain.Snippet(bodyText, 200),
-				deletedAt, state, r.PageID, toMS(r.SyncedAt), r.Revision, hash, blockStats); err != nil {
+				r.ID, toMS(r.CreatedAt), toMS(r.UpdatedAt), r.Revision, body, derived.Text, derived.Snippet,
+				deletedAt, state, r.PageID, toMS(r.SyncedAt), r.Revision, derived.Hash, domain.MarshalBlockStats(derived.Stats)); err != nil {
 				return err
 			}
 		}
@@ -564,7 +662,7 @@ func (s *Store) ApplyRemote(ctx context.Context, r RemoteMemo) (*domain.Memo, er
 			if _, err := tx.ExecContext(ctx, `DELETE FROM memos_fts WHERE memo_id=?`, r.ID); err != nil {
 				return err
 			}
-		} else if err := indexMemo(ctx, tx, r.ID, bodyText, r.Tags); err != nil {
+		} else if err := indexMemo(ctx, tx, r.ID, derived.Text, r.Tags); err != nil {
 			return err
 		}
 		_, err := tx.ExecContext(ctx, `DELETE FROM outbox WHERE memo_id=?`, r.ID)

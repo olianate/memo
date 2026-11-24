@@ -17,6 +17,7 @@ const (
 	KeyRetentionImmediate = "retention.immediate"
 	KeyTheme              = "ui.theme"
 	KeyHotkey             = "ui.hotkey"
+	KeySubmitOnEnter      = "ui.editor.submit_on_enter"
 	KeyStartAtLogin       = "ui.start_at_login"
 	KeyStickyX            = "ui.sticky_x"
 	KeyStickyY            = "ui.sticky_y"
@@ -42,6 +43,7 @@ var Defaults = map[string]string{
 	KeyRetentionImmediate: "false",
 	KeyTheme:              "light",
 	KeyHotkey:             "CmdOrCtrl+Shift+Space",
+	KeySubmitOnEnter:      "true",
 	KeyStartAtLogin:       "false",
 	KeyWorkspaceFileLimit: "5242880",
 	KeyMCPEnabled:         "false",

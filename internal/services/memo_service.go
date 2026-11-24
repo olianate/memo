@@ -8,21 +8,25 @@ import (
 
 	"github.com/olianate/memo/internal/attachments"
 	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/memoedit"
+	"github.com/olianate/memo/internal/presence"
 	"github.com/olianate/memo/internal/store"
-	"github.com/olianate/memo/internal/sync"
 )
 
 // MemoService is the capture, edit, delete and attachment boundary.
 type MemoService struct {
 	store       *store.Store
-	sync        *sync.Service
+	presence    *presence.Keeper
 	attachments *attachments.Service
+	editor      *memoedit.Editor
 	emit        func(name string, data any)
 }
 
-// NewMemoService builds the memo service.
-func NewMemoService(st *store.Store, sy *sync.Service, at *attachments.Service, emit func(string, any)) *MemoService {
-	return &MemoService{store: st, sync: sy, attachments: at, emit: emit}
+// NewMemoService builds the memo service. The editor is the shared write path
+// for memo bodies, so the MCP server and the webview apply the same rules.
+func NewMemoService(st *store.Store, at *attachments.Service, emit func(string, any),
+	editor *memoedit.Editor, keeper *presence.Keeper) *MemoService {
+	return &MemoService{store: st, presence: keeper, attachments: at, editor: editor, emit: emit}
 }
 
 func (s *MemoService) changed(id string) {
@@ -40,7 +44,7 @@ func (s *MemoService) List(filter FilterDTO) ([]MemoDTO, error) {
 	}
 	out := make([]MemoDTO, 0, len(memos))
 	for _, m := range memos {
-		out = append(out, toMemoDTO(m, parseBlocks(m)))
+		out = append(out, toMemoDTO(m))
 	}
 	return out, nil
 }
@@ -49,16 +53,14 @@ func (s *MemoService) List(filter FilterDTO) ([]MemoDTO, error) {
 // hydration still returns the metadata so the UI can show a placeholder.
 func (s *MemoService) Get(id string) (MemoDTO, error) {
 	ctx := contextBackground()
-	memo, err := s.store.GetMemo(ctx, id)
+	memo, err := s.presence.Ensure(ctx, id)
 	if err != nil {
-		return MemoDTO{}, err
-	}
-	if memo.LocalState == domain.LocalEvicted && s.sync != nil {
-		if hydrated, err := s.sync.HydrateIfEvicted(ctx, id); err == nil {
-			memo = hydrated
+		if memo == nil {
+			return MemoDTO{}, err
 		}
+		_ = s.store.Log(ctx, "warn", "memo", fmt.Sprintf("body of %s is unavailable: %v", id, err))
 	}
-	return toMemoDTO(*memo, parseBlocks(*memo)), nil
+	return toMemoDTO(*memo), nil
 }
 
 // Counts returns the sidebar totals.
@@ -70,63 +72,27 @@ func (s *MemoService) Counts() (CountsDTO, error) {
 	return CountsDTO{Notes: notes, Tags: tags, Days: days}, nil
 }
 
-// Create stores a new memo and returns it.
-func (s *MemoService) Create(blocks []domain.Block, tags []string) (MemoDTO, error) {
-	if len(blocks) > 500 {
-		return MemoDTO{}, errors.New("a memo is limited to 500 blocks")
-	}
-	memo, err := s.store.CreateMemo(contextBackground(), store.MemoInput{Blocks: blocks, Tags: cleanTags(tags)})
+// Create stores a new memo body and returns it.
+func (s *MemoService) Create(body string, tags []string) (MemoDTO, error) {
+	memo, err := s.editor.Create(contextBackground(), memoedit.Draft{Body: body, Tags: tags})
 	if err != nil {
 		return MemoDTO{}, err
 	}
-	s.changed(memo.ID)
-	return toMemoDTO(*memo, blocks), nil
+	return toMemoDTO(*memo), nil
 }
 
-// Update edits a memo. An evicted body is hydrated first; if that is not
+// Update edits a memo body. An evicted body is hydrated first; if that is not
 // possible the edit is refused rather than overwriting the archive.
-func (s *MemoService) Update(id string, blocks []domain.Block, tags []string, keepLocal bool) (MemoDTO, error) {
-	if len(blocks) > 500 {
-		return MemoDTO{}, errors.New("a memo is limited to 500 blocks")
-	}
-	ctx := contextBackground()
-	memo, err := s.store.GetMemo(ctx, id)
+func (s *MemoService) Update(id string, body string, tags []string, keepLocal bool) (MemoDTO, error) {
+	updated, err := s.editor.Edit(contextBackground(), id, memoedit.Change{
+		Body:      &body,
+		Tags:      &tags,
+		KeepLocal: &keepLocal,
+	})
 	if err != nil {
 		return MemoDTO{}, err
 	}
-	if memo.LocalState == domain.LocalEvicted {
-		if s.sync == nil {
-			return MemoDTO{}, errors.New("this memo is evicted and cannot be hydrated")
-		}
-		if err := s.sync.Hydrate(ctx, id); err != nil {
-			return MemoDTO{}, fmt.Errorf("hydrate before editing: %w", err)
-		}
-	}
-	if err := s.validateAttachmentIDs(ctx, id, blocks); err != nil {
-		return MemoDTO{}, err
-	}
-	updated, err := s.store.UpdateMemo(ctx, id, blocks, cleanTags(tags), &keepLocal)
-	if err != nil {
-		return MemoDTO{}, err
-	}
-	s.changed(id)
-	return toMemoDTO(*updated, blocks), nil
-}
-
-func (s *MemoService) validateAttachmentIDs(ctx context.Context, memoID string, blocks []domain.Block) error {
-	for _, b := range blocks {
-		if b.Type != domain.BlockImage && b.Type != domain.BlockFile {
-			continue
-		}
-		if b.AttachmentID == "" {
-			return errors.New("attachment block is missing its attachment id")
-		}
-		att, err := s.store.GetAttachment(ctx, b.AttachmentID)
-		if err != nil || att.MemoID != memoID {
-			return errors.New("attachment does not belong to this memo")
-		}
-	}
-	return nil
+	return toMemoDTO(*updated), nil
 }
 
 // Delete soft-deletes a memo so the tombstone can sync.
@@ -151,7 +117,7 @@ func (s *MemoService) Restore(id string) (MemoDTO, error) {
 		_ = s.store.ClearPurgedPage(ctx, memo.NotionPageID)
 	}
 	s.changed(id)
-	return toMemoDTO(*memo, parseBlocks(*memo)), nil
+	return toMemoDTO(*memo), nil
 }
 
 // Purge permanently removes one memo from the local trash. A Notion page is
@@ -212,56 +178,81 @@ func (s *MemoService) SetKeepLocal(id string, keep bool) error {
 	return nil
 }
 
-// ParseMarkdown is the raw-editor → AST path. The canonical body stays blocks.
-func (s *MemoService) ParseMarkdown(source string) []domain.Block {
-	return markdownParse(source)
-}
-
-// SerializeMarkdown is the AST → raw-editor path.
-func (s *MemoService) SerializeMarkdown(blocks []domain.Block) string {
-	return markdownSerialize(blocks)
+// CreateWithAttachments stores a new memo and its files as one revision, so a
+// capture with images never passes through an empty draft memo.
+func (s *MemoService) CreateWithAttachments(body string, tags []string, files []AttachmentPayload) (MemoDTO, error) {
+	decoded, err := decodePayloads(files)
+	if err != nil {
+		return MemoDTO{}, err
+	}
+	memo, err := s.editor.Create(contextBackground(), memoedit.Draft{Body: body, Tags: tags, Files: decoded})
+	if err != nil {
+		return MemoDTO{}, err
+	}
+	return toMemoDTO(*memo), nil
 }
 
 // AddAttachmentBase64 ingests a file from the webview. It appends the matching
-// attachment block to the memo so the change is durable immediately.
+// attachment reference to the Markdown body so the change is durable immediately.
 func (s *MemoService) AddAttachmentBase64(memoID, name, mime, data string) (AttachmentDTO, error) {
-	if len(data) > 96<<20 {
-		return AttachmentDTO{}, errors.New("file is too large")
-	}
-	raw, err := base64.StdEncoding.DecodeString(data)
+	added, err := s.AddAttachments(memoID, []AttachmentPayload{{Name: name, MIME: mime, Data: data}})
 	if err != nil {
-		return AttachmentDTO{}, errors.New("file payload is not valid base64")
+		return AttachmentDTO{}, err
+	}
+	if len(added) != 1 {
+		return AttachmentDTO{}, errors.New("attachment was written but is missing from the memo")
+	}
+	return added[0], nil
+}
+
+// AddAttachments ingests several files as one revision and one sync outbox
+// entry, and returns the attachments it added.
+func (s *MemoService) AddAttachments(memoID string, files []AttachmentPayload) ([]AttachmentDTO, error) {
+	decoded, err := decodePayloads(files)
+	if err != nil {
+		return nil, err
+	}
+	if len(decoded) == 0 {
+		return []AttachmentDTO{}, nil
 	}
 	ctx := contextBackground()
-	memo, err := s.store.GetMemo(ctx, memoID)
+	before, err := s.store.GetMemo(ctx, memoID)
 	if err != nil {
-		return AttachmentDTO{}, err
+		return nil, err
 	}
-	if memo.LocalState == domain.LocalEvicted {
-		return AttachmentDTO{}, errors.New("hydrate this memo before adding attachments")
+	known := make(map[string]bool, len(before.Attachments))
+	for _, att := range before.Attachments {
+		known[att.ID] = true
 	}
-	att, err := s.attachments.Add(ctx, memoID, name, mime, raw)
+	memo, err := s.editor.Edit(ctx, memoID, memoedit.Change{AddFiles: decoded})
 	if err != nil {
-		return AttachmentDTO{}, err
+		return nil, err
 	}
-	blocks := parseBlocks(*memo)
-	blockType := domain.BlockFile
-	if att.Kind == domain.AttachmentImage {
-		blockType = domain.BlockImage
+	added := make([]AttachmentDTO, 0, len(decoded))
+	for _, att := range memo.Attachments {
+		if !known[att.ID] {
+			added = append(added, toAttachmentDTO(att))
+		}
 	}
-	blocks = append(blocks, domain.Block{
-		ID: domain.NewID(), Type: blockType, AttachmentID: att.ID, Alt: att.OriginalName,
-	})
-	tags := make([]string, 0, len(memo.Tags))
-	for _, t := range memo.Tags {
-		tags = append(tags, t.Name)
+	if len(added) != len(decoded) {
+		return nil, errors.New("an attachment was written but is missing from the memo")
 	}
-	if _, err := s.store.UpdateMemo(ctx, memoID, blocks, tags, nil); err != nil {
-		_ = s.attachments.Remove(ctx, att.ID)
-		return AttachmentDTO{}, err
+	return added, nil
+}
+
+func decodePayloads(files []AttachmentPayload) ([]memoedit.File, error) {
+	out := make([]memoedit.File, 0, len(files))
+	for _, f := range files {
+		if len(f.Data) > 96<<20 {
+			return nil, errors.New("file is too large")
+		}
+		raw, err := base64.StdEncoding.DecodeString(f.Data)
+		if err != nil {
+			return nil, errors.New("file payload is not valid base64")
+		}
+		out = append(out, memoedit.File{Name: f.Name, MIME: f.MIME, Data: raw})
 	}
-	s.changed(memoID)
-	return toAttachmentDTO(*att), nil
+	return out, nil
 }
 
 // RemoveAttachment deletes an attachment and its block from the memo body.
@@ -271,31 +262,8 @@ func (s *MemoService) RemoveAttachment(id string) error {
 	if err != nil {
 		return err
 	}
-	memo, err := s.store.GetMemo(ctx, att.MemoID)
-	if err != nil {
-		return err
-	}
-	blocks := parseBlocks(*memo)
-	kept := blocks[:0]
-	for _, b := range blocks {
-		if b.AttachmentID != id {
-			kept = append(kept, b)
-		}
-	}
-	tags := make([]string, 0, len(memo.Tags))
-	for _, t := range memo.Tags {
-		tags = append(tags, t.Name)
-	}
-	if memo.LocalState == domain.LocalPresent {
-		if _, err := s.store.UpdateMemo(ctx, memo.ID, kept, tags, nil); err != nil {
-			return err
-		}
-	}
-	if err := s.attachments.Remove(ctx, id); err != nil {
-		return err
-	}
-	s.changed(memo.ID)
-	return nil
+	_, err = s.editor.Edit(ctx, att.MemoID, memoedit.Change{RemoveAttachmentIDs: []string{id}})
+	return err
 }
 
 // AttachmentThumb returns a data URL for an image thumbnail.
@@ -316,15 +284,12 @@ func (s *MemoService) OpenAttachment(id string) error {
 
 // Hydrate fetches an evicted memo's body and attachments from Notion.
 func (s *MemoService) Hydrate(id string) (MemoDTO, error) {
-	if s.sync == nil {
+	if s.presence == nil {
 		return MemoDTO{}, errors.New("sync service is unavailable")
 	}
-	if err := s.sync.Hydrate(contextBackground(), id); err != nil {
-		return MemoDTO{}, err
-	}
-	memo, err := s.store.GetMemo(contextBackground(), id)
+	memo, err := s.presence.Ensure(contextBackground(), id)
 	if err != nil {
 		return MemoDTO{}, err
 	}
-	return toMemoDTO(*memo, parseBlocks(*memo)), nil
+	return toMemoDTO(*memo), nil
 }

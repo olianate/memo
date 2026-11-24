@@ -7,6 +7,8 @@ import (
 
 	"github.com/olianate/memo/internal/config"
 	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/domain/markdown"
+	"github.com/olianate/memo/internal/presence"
 	"github.com/olianate/memo/internal/store"
 )
 
@@ -34,7 +36,7 @@ func EligibleForEviction(memo domain.Memo, pendingOutbox bool, now time.Time, p 
 	if !p.Enabled || memo.DeletedAt != nil {
 		return false
 	}
-	if memo.LocalState != domain.LocalPresent || memo.NotionPageID == "" || memo.NotionSyncedAt == nil {
+	if presence.Evicted(memo) || memo.NotionPageID == "" || memo.NotionSyncedAt == nil {
 		return false
 	}
 	if memo.KeepLocal || pendingOutbox {
@@ -80,18 +82,13 @@ func (s *Service) EvictOnce(ctx context.Context) error {
 		if !EligibleForEviction(*memo, item != nil, now, policy) {
 			continue
 		}
-		for _, a := range memo.Attachments {
-			if s.importer != nil {
-				_ = s.importer.DeleteFiles(ctx, a)
-			}
-			_ = s.store.MarkAttachmentEvicted(ctx, a.ID, now)
+		if s.presence == nil {
+			continue
 		}
-		if err := s.store.SetEvicted(ctx, memo.ID); err != nil {
+		if err := s.presence.Evict(ctx, memo.ID); err != nil {
 			continue
 		}
 		count++
-		_ = s.store.Log(ctx, "info", "retention", "evicted memo "+memo.ID)
-		s.emit("memos:changed", map[string]string{"id": memo.ID})
 	}
 	if count > 0 {
 		s.emit("retention:evicted", map[string]int{"count": count})
@@ -105,7 +102,7 @@ func (s *Service) Hydrate(ctx context.Context, memoID string) error {
 	if err != nil {
 		return err
 	}
-	if memo.LocalState == domain.LocalPresent {
+	if !presence.Evicted(*memo) {
 		return nil
 	}
 	if memo.NotionPageID == "" {
@@ -130,15 +127,10 @@ func (s *Service) Hydrate(ctx context.Context, memoID string) error {
 		return err
 	}
 	now := s.clock()
-	if err := s.store.HydrateMemo(ctx, memoID, blocks, now); err != nil {
-		return err
+	if s.presence == nil {
+		return errors.New("body presence is not configured")
 	}
-	if err := s.store.SetPresent(ctx, memoID, now); err != nil {
-		return err
-	}
-	_ = s.store.Log(ctx, "info", "hydrate", "memo "+memoID+" restored from Notion")
-	s.emit("memos:changed", map[string]string{"id": memoID})
-	return nil
+	return s.presence.Restore(ctx, memoID, markdown.Serialize(blocks), now)
 }
 
 // RestoreProgress is emitted during restore-all.
@@ -157,7 +149,7 @@ func (s *Service) RestoreAll(ctx context.Context) (RestoreProgress, error) {
 	}
 	targets := []domain.Memo{}
 	for _, m := range memos {
-		if m.LocalState == domain.LocalEvicted {
+		if presence.Evicted(m) {
 			targets = append(targets, m)
 		}
 	}
@@ -193,19 +185,4 @@ func (s *Service) allActiveMemos(ctx context.Context) ([]domain.Memo, error) {
 			return out, nil
 		}
 	}
-}
-
-// HydrateIfEvicted is the read path used when opening search results or memos.
-func (s *Service) HydrateIfEvicted(ctx context.Context, memoID string) (*domain.Memo, error) {
-	memo, err := s.store.GetMemo(ctx, memoID)
-	if err != nil {
-		return nil, err
-	}
-	if memo.LocalState == domain.LocalEvicted {
-		if err := s.Hydrate(ctx, memoID); err != nil {
-			return memo, err
-		}
-		return s.store.GetMemo(ctx, memoID)
-	}
-	return memo, nil
 }
