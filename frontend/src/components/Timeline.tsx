@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Attachment, Memo } from "../types";
 import type { Backend } from "../backend";
-import { blocksFromMarkdown, BlockPreview } from "../lib/markdown";
+import { BlockPreview } from "../lib/markdown";
+import { memoPreview } from "../lib/preview";
 import { groupByDay } from "../lib/group";
 import { dayLabel, formatTime, humanBytes } from "../lib/format";
 import { EmptyState, StatusBadge, TagChip } from "./common";
@@ -89,12 +90,7 @@ export function Timeline({
             </div>
             {group.memos.map((memo) => {
               const open = expanded.has(memo.id);
-              const blocks = memo.body ? blocksFromMarkdown(memo.body) : [];
-              // Evicted attachments keep metadata but no bytes; the eviction
-              // banner explains the state instead of rendering broken media.
-              const images = (memo.attachments ?? []).filter((a) => a.kind === "image" && a.present);
-              const files = (memo.attachments ?? []).filter((a) => a.kind === "file" && a.present);
-              const long = memo.body.split("\n").filter((line) => line.trim()).length > 6;
+              const preview = memoPreview(memo);
               const updated = memo.updated_at !== memo.created_at;
               return (
                 <article
@@ -150,7 +146,7 @@ export function Timeline({
                   ) : (
                     <div className={`memo-body ${open ? "is-open" : ""}`}>
                       <BlockPreview
-                        blocks={blocks}
+                        blocks={preview.blocks}
                         limit={open ? 500 : 4}
                         onOpenLink={(url) => {
                           backend.openURL(url).catch((err) => onError(String(err)));
@@ -159,17 +155,17 @@ export function Timeline({
                     </div>
                   )}
 
-                  {images.length > 0 && (
+                  {preview.images.length > 0 && (
                     <TimelineImages
                       backend={backend}
-                      attachments={images}
-                      collapsed={!open && images.length > 2}
+                      attachments={preview.images}
+                      collapsed={!open && preview.images.length > 2}
                       onError={onError}
                     />
                   )}
-                  {files.length > 0 && (
+                  {preview.files.length > 0 && (
                     <div className="timeline-files">
-                      {files.slice(0, open ? 20 : 2).map((file) => (
+                      {preview.files.slice(0, open ? 20 : 2).map((file) => (
                         <button
                           type="button"
                           className="file-chip"
@@ -187,7 +183,7 @@ export function Timeline({
                     </div>
                   )}
 
-                  {(long || (memo.attachments ?? []).length > 0) && (
+                  {(preview.long || (memo.attachments ?? []).length > 0) && (
                     <button
                       type="button"
                       className="expand-button"
