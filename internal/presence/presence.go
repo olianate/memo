@@ -103,21 +103,34 @@ func (k *Keeper) Evict(ctx context.Context, id string) error {
 	return nil
 }
 
+// Restore makes a downloaded body present. Keeper owns the resulting local
+// state; sync only supplies the body and the hydration timestamp.
+func (k *Keeper) Restore(ctx context.Context, id, body string, at time.Time) error {
+	if err := k.store.HydrateMemo(ctx, id, body, at); err != nil {
+		return err
+	}
+	_ = k.store.Log(ctx, "info", "hydrate", "memo "+id+" restored from Notion")
+	k.notify("memos:changed", map[string]string{"id": id})
+	return nil
+}
+
 // MergeRemote applies a pulled page. When the local body is evicted the remote
 // text still feeds search and derived fields, but the body stays absent; the
 // second result reports whether the caller may wire attachment bytes.
 func (k *Keeper) MergeRemote(ctx context.Context, r store.RemoteMemo) (*domain.Memo, bool, error) {
-	preserveAbsent := false
+	state := domain.LocalPresent
 	if local, err := k.store.GetMemo(ctx, r.ID); err == nil {
-		preserveAbsent = Evicted(*local)
+		if Evicted(*local) {
+			state = domain.LocalEvicted
+		}
 	} else if !errors.Is(err, domain.ErrNotFound) {
 		return nil, false, err
 	}
-	memo, err := k.store.ApplyRemote(ctx, r, preserveAbsent)
+	memo, err := k.store.ApplyRemote(ctx, r, state)
 	if err != nil {
 		return nil, false, err
 	}
-	return memo, !preserveAbsent, nil
+	return memo, state == domain.LocalPresent, nil
 }
 
 func (k *Keeper) notify(name string, data any) {

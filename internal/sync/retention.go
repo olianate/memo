@@ -36,7 +36,7 @@ func EligibleForEviction(memo domain.Memo, pendingOutbox bool, now time.Time, p 
 	if !p.Enabled || memo.DeletedAt != nil {
 		return false
 	}
-	if memo.LocalState != domain.LocalPresent || memo.NotionPageID == "" || memo.NotionSyncedAt == nil {
+	if presence.Evicted(memo) || memo.NotionPageID == "" || memo.NotionSyncedAt == nil {
 		return false
 	}
 	if memo.KeepLocal || pendingOutbox {
@@ -127,12 +127,10 @@ func (s *Service) Hydrate(ctx context.Context, memoID string) error {
 		return err
 	}
 	now := s.clock()
-	if err := s.store.HydrateMemo(ctx, memoID, markdown.Serialize(blocks), now); err != nil {
-		return err
+	if s.presence == nil {
+		return errors.New("body presence is not configured")
 	}
-	_ = s.store.Log(ctx, "info", "hydrate", "memo "+memoID+" restored from Notion")
-	s.emit("memos:changed", map[string]string{"id": memoID})
-	return nil
+	return s.presence.Restore(ctx, memoID, markdown.Serialize(blocks), now)
 }
 
 // RestoreProgress is emitted during restore-all.

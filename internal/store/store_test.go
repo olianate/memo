@@ -94,9 +94,47 @@ func TestUpdateMemoBumpsRevisionAndReindexes(t *testing.T) {
 	if len(updated.Tags) != 1 || updated.Tags[0].NormalizedName != "b" {
 		t.Fatalf("tags = %+v", updated.Tags)
 	}
+	if updated.ContentHash != domain.HashContent("new 中文 text", []string{"b"}) {
+		t.Fatalf("hash = %q", updated.ContentHash)
+	}
 	item, err := s.OutboxForMemo(ctx, memo.ID)
 	if err != nil || item.Revision != 2 {
 		t.Fatalf("outbox = %+v, %v", item, err)
+	}
+}
+
+func TestUpdateMemoMetadataRefreshesHashWithoutBody(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	memo, err := s.CreateMemo(ctx, MemoInput{Body: "body stays", Tags: []string{"a"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := s.UpdateMemoMetadata(ctx, memo.ID, []string{"b"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Revision != 2 || updated.Body != "body stays" {
+		t.Fatalf("metadata update touched the body/revision: %+v", updated)
+	}
+	if updated.ContentHash != domain.HashContent("body stays", []string{"b"}) {
+		t.Fatalf("hash = %q", updated.ContentHash)
+	}
+
+	if err := s.EvictBody(ctx, memo.ID, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	evicted, err := s.GetMemo(ctx, memo.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evictedHash := evicted.ContentHash
+	again, err := s.UpdateMemoMetadata(ctx, memo.ID, []string{"c"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.LocalState != domain.LocalEvicted || again.ContentHash != evictedHash {
+		t.Fatalf("evicted metadata update = %+v", again)
 	}
 }
 
@@ -279,6 +317,9 @@ func TestTagRenameReindexesAndQueuesPropertyPush(t *testing.T) {
 	if len(got.Tags) != 1 || got.Tags[0].Name != "career" {
 		t.Fatalf("tags = %+v", got.Tags)
 	}
+	if got.ContentHash != domain.HashContent("body stays", []string{"career"}) {
+		t.Fatalf("tag rename left a stale hash: %q", got.ContentHash)
+	}
 	var count int
 	if err := s.DB().QueryRow(`SELECT COUNT(*) FROM memos_fts WHERE tags_text MATCH '"career"'`).Scan(&count); err != nil {
 		t.Fatal(err)
@@ -423,7 +464,7 @@ func TestApplyRemoteDoesNotEnqueue(t *testing.T) {
 		Tags:      []string{"remote"},
 		SyncedAt:  now,
 	}
-	memo, err := s.ApplyRemote(ctx, remote, false)
+	memo, err := s.ApplyRemote(ctx, remote, domain.LocalPresent)
 	if err != nil {
 		t.Fatal(err)
 	}

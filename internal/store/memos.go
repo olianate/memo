@@ -88,32 +88,17 @@ func (s *Store) UpdateMemo(ctx context.Context, id string, body string, tags []s
 // computed its projection, so an edit that validated the body does not parse it
 // twice.
 func (s *Store) UpdateMemoDerived(ctx context.Context, id string, body string, tags []string, keepLocal *bool, derived Derived) (*domain.Memo, error) {
-	now := time.Now().UTC()
 	err := withTx(ctx, s.db, func(tx *sql.Tx) error {
-		var revision int64
-		if err := tx.QueryRowContext(ctx, `SELECT revision FROM memos WHERE id=?`, id).Scan(&revision); err != nil {
-			if err == sql.ErrNoRows {
-				return domain.ErrNotFound
-			}
-			return err
-		}
-		revision++
-		q := `UPDATE memos SET body_md=?, body_text=?, snippet=?, updated_at=?, revision=?, content_hash=?, block_stats=?, local_state=?, sync_error='' WHERE id=?`
-		args := []any{body, derived.Text, derived.Snippet, toMS(now), revision, derived.Hash, domain.MarshalBlockStats(derived.Stats), string(domain.LocalPresent), id}
-		if keepLocal != nil {
-			q = `UPDATE memos SET body_md=?, body_text=?, snippet=?, updated_at=?, revision=?, content_hash=?, block_stats=?, local_state=?, sync_error='', keep_local=? WHERE id=?`
-			args = []any{body, derived.Text, derived.Snippet, toMS(now), revision, derived.Hash, domain.MarshalBlockStats(derived.Stats), string(domain.LocalPresent), boolInt(*keepLocal), id}
-		}
-		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
-			return err
-		}
-		if err := setMemoTags(ctx, tx, id, tags); err != nil {
-			return err
-		}
-		if err := indexMemo(ctx, tx, id, derived.Text, tags); err != nil {
-			return err
-		}
-		return enqueueTx(ctx, tx, id, domain.OutboxUpsert, revision, time.Now().UTC())
+		_, err := writeMemoTx(ctx, tx, id, memoWrite{
+			Body:         &body,
+			Tags:         tags,
+			KeepLocal:    keepLocal,
+			Derived:      &derived,
+			LocalState:   domain.LocalPresent,
+			BumpRevision: true,
+			Enqueue:      true,
+		})
+		return err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("store: update memo: %w", err)
@@ -125,35 +110,113 @@ func (s *Store) UpdateMemoDerived(ctx context.Context, id string, body string, t
 // untouched, so an evicted memo stays evicted and a metadata-only edit costs no
 // re-derivation. It still bumps the revision: tags are synced properties.
 func (s *Store) UpdateMemoMetadata(ctx context.Context, id string, tags []string, keepLocal bool) (*domain.Memo, error) {
-	now := time.Now().UTC()
 	err := withTx(ctx, s.db, func(tx *sql.Tx) error {
-		var revision int64
-		var bodyText string
-		if err := tx.QueryRowContext(ctx, `SELECT revision, body_text FROM memos WHERE id=?`, id).
-			Scan(&revision, &bodyText); err != nil {
-			if err == sql.ErrNoRows {
-				return domain.ErrNotFound
-			}
-			return err
-		}
-		revision++
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE memos SET updated_at=?, revision=?, keep_local=?, sync_error='' WHERE id=?`,
-			toMS(now), revision, boolInt(keepLocal), id); err != nil {
-			return err
-		}
-		if err := setMemoTags(ctx, tx, id, tags); err != nil {
-			return err
-		}
-		if err := indexMemo(ctx, tx, id, bodyText, tags); err != nil {
-			return err
-		}
-		return enqueueTx(ctx, tx, id, domain.OutboxUpsert, revision, now)
+		_, err := writeMemoTx(ctx, tx, id, memoWrite{
+			Tags:         tags,
+			KeepLocal:    &keepLocal,
+			BumpRevision: true,
+			Enqueue:      true,
+		})
+		return err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("store: update memo metadata: %w", err)
 	}
 	return s.GetMemo(ctx, id)
+}
+
+// memoWrite is one local memo update. A nil Body leaves the body untouched;
+// otherwise Derived may carry an already-parsed projection. LocalState is empty
+// to preserve the current state or set explicitly by a body write.
+type memoWrite struct {
+	Body         *string
+	Tags         []string
+	KeepLocal    *bool
+	Derived      *Derived
+	LocalState   domain.LocalState
+	BumpRevision bool
+	Enqueue      bool
+}
+
+// writeMemoTx owns every mutable memo column and the derived search row in one
+// transaction, so update paths cannot drift on revision, hash, FTS or outbox.
+func writeMemoTx(ctx context.Context, tx *sql.Tx, id string, w memoWrite) (int64, error) {
+	var revision int64
+	var bodyMD, bodyText string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT revision, body_md, body_text FROM memos WHERE id=?`, id).
+		Scan(&revision, &bodyMD, &bodyText); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, domain.ErrNotFound
+		}
+		return 0, err
+	}
+	if w.BumpRevision {
+		revision++
+	}
+	now := time.Now().UTC()
+	if w.Body != nil {
+		bodyMD = *w.Body
+		derived := w.Derived
+		if derived == nil {
+			d := deriveBody(*w.Body, w.Tags)
+			derived = &d
+		}
+		bodyText = derived.Text
+		state := w.LocalState
+		if state == "" {
+			state = domain.LocalPresent
+		}
+		sets := []string{"body_md=?", "body_text=?", "snippet=?", "updated_at=?", "revision=?",
+			"content_hash=?", "block_stats=?", "local_state=?", "sync_error=''"}
+		args := []any{bodyMD, bodyText, derived.Snippet, toMS(now), revision, derived.Hash,
+			domain.MarshalBlockStats(derived.Stats), string(state)}
+		if w.KeepLocal != nil {
+			sets = append(sets, "keep_local=?")
+			args = append(args, boolInt(*w.KeepLocal))
+		}
+		args = append(args, id)
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE memos SET `+strings.Join(sets, ", ")+` WHERE id=?`, args...); err != nil {
+			return 0, err
+		}
+	} else {
+		sets := []string{"updated_at=?", "revision=?", "sync_error=''"}
+		args := []any{toMS(now), revision}
+		if w.LocalState != "" {
+			sets = append(sets, "local_state=?")
+			args = append(args, string(w.LocalState))
+		}
+		if w.KeepLocal != nil {
+			sets = append(sets, "keep_local=?")
+			args = append(args, boolInt(*w.KeepLocal))
+		}
+		// A metadata edit still changes the synced content hash. An evicted body
+		// has no local markdown, so its stored hash stays intact.
+		if w.Tags != nil && bodyMD != "" {
+			sets = append(sets, "content_hash=?")
+			args = append(args, domain.HashContent(bodyMD, w.Tags))
+		}
+		args = append(args, id)
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE memos SET `+strings.Join(sets, ", ")+` WHERE id=?`, args...); err != nil {
+			return 0, err
+		}
+	}
+	if w.Tags != nil {
+		if err := setMemoTags(ctx, tx, id, w.Tags); err != nil {
+			return 0, err
+		}
+	}
+	if err := indexMemo(ctx, tx, id, bodyText, w.Tags); err != nil {
+		return 0, err
+	}
+	if w.Enqueue {
+		if err := enqueueTx(ctx, tx, id, domain.OutboxUpsert, revision, now); err != nil {
+			return 0, err
+		}
+	}
+	return revision, nil
 }
 
 // SoftDelete tombstones a memo locally and queues the Status=deleted write.
@@ -299,17 +362,17 @@ func (s *Store) GetMemoByPageID(ctx context.Context, pageID string) (*domain.Mem
 	return memo, nil
 }
 
-func scanMemo(row *sql.Row) (*domain.Memo, error) {
+type memoScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanMemoRow(sc memoScanner) (*domain.Memo, error) {
 	var m domain.Memo
 	var created, updated, deleted, synced, hydrated sql.NullInt64
 	var keepLocal int
 	var state, blockStats string
-	err := row.Scan(&m.ID, &created, &updated, &m.Revision, &m.Body, &m.BodyText, &m.Snippet,
-		&deleted, &keepLocal, &state, &m.NotionPageID, &synced, &hydrated, &m.BaseRevision, &m.ContentHash, &m.SyncError, &blockStats)
-	if err == sql.ErrNoRows {
-		return nil, domain.ErrNotFound
-	}
-	if err != nil {
+	if err := sc.Scan(&m.ID, &created, &updated, &m.Revision, &m.Body, &m.BodyText, &m.Snippet,
+		&deleted, &keepLocal, &state, &m.NotionPageID, &synced, &hydrated, &m.BaseRevision, &m.ContentHash, &m.SyncError, &blockStats); err != nil {
 		return nil, err
 	}
 	m.CreatedAt = fromMS(created.Int64)
@@ -323,6 +386,14 @@ func scanMemo(row *sql.Row) (*domain.Memo, error) {
 	m.Tags = []domain.Tag{}
 	m.Attachments = []domain.Attachment{}
 	return &m, nil
+}
+
+func scanMemo(row *sql.Row) (*domain.Memo, error) {
+	m, err := scanMemoRow(row)
+	if err == sql.ErrNoRows {
+		return nil, domain.ErrNotFound
+	}
+	return m, err
 }
 
 func (s *Store) hydrateRelations(ctx context.Context, m *domain.Memo) error {
@@ -448,23 +519,11 @@ func (s *Store) ListMemos(ctx context.Context, f MemoFilter) ([]domain.Memo, err
 	defer rows.Close()
 	memos := []domain.Memo{}
 	for rows.Next() {
-		var m domain.Memo
-		var created, updated, deleted, synced, hydrated sql.NullInt64
-		var keepLocal int
-		var state, blockStats string
-		if err := rows.Scan(&m.ID, &created, &updated, &m.Revision, &m.Body, &m.BodyText, &m.Snippet,
-			&deleted, &keepLocal, &state, &m.NotionPageID, &synced, &hydrated, &m.BaseRevision, &m.ContentHash, &m.SyncError, &blockStats); err != nil {
+		m, err := scanMemoRow(rows)
+		if err != nil {
 			return nil, err
 		}
-		m.CreatedAt = fromMS(created.Int64)
-		m.UpdatedAt = fromMS(updated.Int64)
-		m.DeletedAt = msPtr(deleted)
-		m.NotionSyncedAt = msPtr(synced)
-		m.LastHydratedAt = msPtr(hydrated)
-		m.KeepLocal = keepLocal == 1
-		m.LocalState = domain.LocalState(state)
-		m.BlockStats = domain.UnmarshalBlockStats(blockStats)
-		memos = append(memos, m)
+		memos = append(memos, *m)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -557,15 +616,17 @@ type RemoteMemo struct {
 
 // ApplyRemote inserts or replaces local state from a Notion page. It never
 // enqueues an outbox row: the remote copy is authoritative by definition here.
-// preserveBodyAbsent keeps an evicted body empty while the remote text still
-// feeds body_text and the search index.
-func (s *Store) ApplyRemote(ctx context.Context, r RemoteMemo, preserveBodyAbsent bool) (*domain.Memo, error) {
+// The caller supplies the resulting local state; evicted keeps the body empty
+// while the remote text still feeds body_text and the search index.
+func (s *Store) ApplyRemote(ctx context.Context, r RemoteMemo, localState domain.LocalState) (*domain.Memo, error) {
 	body := r.Body
-	state := string(domain.LocalPresent)
-	if preserveBodyAbsent {
-		body = ""
-		state = string(domain.LocalEvicted)
+	if localState == "" {
+		localState = domain.LocalPresent
 	}
+	if localState == domain.LocalEvicted {
+		body = ""
+	}
+	state := string(localState)
 	// Derived text always comes from the remote body, so an evicted memo stays
 	// searchable after a pull.
 	derived := deriveBody(r.Body, r.Tags)
