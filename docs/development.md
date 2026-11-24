@@ -104,6 +104,12 @@ no Markdown form, and writes the result to `body_md`. Attachments stay
 `attachment://id` references in the body; bytes move only when Notion uploads or
 downloads them.
 
+The block subset is pinned by one fixture suite,
+`frontend/src/test/markdown-suite.json`. Both `internal/domain/markdown` and the
+frontend preview parser run it, so the editor's projection and the sync
+projection cannot drift. Preview-only syntax (tables) stays out of the suite:
+the sync projection has no table block and keeps such lines as paragraphs.
+
 ## Notion setup
 
 1. Create a Notion integration and copy its personal access token.

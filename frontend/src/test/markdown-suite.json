@@ -1,0 +1,100 @@
+{
+  "description": "Block-level Markdown conformance suite. Both internal/domain/markdown (Go) and frontend/src/lib/markdown.tsx must parse every case into the same blocks. Preview-only extensions (tables) are intentionally absent: the sync projection has no table block, so a table stays paragraphs there.",
+  "cases": [
+    {
+      "name": "paragraph",
+      "body": "一段正文",
+      "blocks": [{ "type": "paragraph", "text": "一段正文" }]
+    },
+    {
+      "name": "blank lines separate blocks",
+      "body": "第一段\n\n\n第二段",
+      "blocks": [
+        { "type": "paragraph", "text": "第一段" },
+        { "type": "paragraph", "text": "第二段" }
+      ]
+    },
+    {
+      "name": "headings keep their level",
+      "body": "# 一级\n\n### 三级",
+      "blocks": [
+        { "type": "heading", "text": "一级", "level": 1 },
+        { "type": "heading", "text": "三级", "level": 3 }
+      ]
+    },
+    {
+      "name": "all bullet markers are bullets",
+      "body": "- 甲\n* 乙\n+ 丙",
+      "blocks": [
+        { "type": "bullet", "text": "甲" },
+        { "type": "bullet", "text": "乙" },
+        { "type": "bullet", "text": "丙" }
+      ]
+    },
+    {
+      "name": "todos carry their checkbox",
+      "body": "- [ ] 待办\n- [x] 完成",
+      "blocks": [
+        { "type": "todo", "text": "待办", "checked": false },
+        { "type": "todo", "text": "完成", "checked": true }
+      ]
+    },
+    {
+      "name": "ordered lists accept dot and paren",
+      "body": "1. 第一\n2) 第二",
+      "blocks": [
+        { "type": "ordered", "text": "第一" },
+        { "type": "ordered", "text": "第二" }
+      ]
+    },
+    {
+      "name": "quote strips one marker space",
+      "body": "> 引用",
+      "blocks": [{ "type": "quote", "text": "引用" }]
+    },
+    {
+      "name": "divider",
+      "body": "---",
+      "blocks": [{ "type": "divider", "text": "" }]
+    },
+    {
+      "name": "backtick fence keeps language and blank lines",
+      "body": "```go\nfmt.Println(\"hello\")\n\nsecond\n```",
+      "blocks": [{ "type": "code", "text": "fmt.Println(\"hello\")\n\nsecond", "language": "go" }]
+    },
+    {
+      "name": "tilde fence",
+      "body": "~~~\nplain text\n~~~",
+      "blocks": [{ "type": "code", "text": "plain text", "language": "" }]
+    },
+    {
+      "name": "attachment references",
+      "body": "![图](attachment://a1)\n\n[文件.pdf](attachment://a2)",
+      "blocks": [
+        { "type": "image", "text": "", "alt": "图", "attachment_id": "a1" },
+        { "type": "file", "text": "", "alt": "文件.pdf", "attachment_id": "a2" }
+      ]
+    },
+    {
+      "name": "inline marks",
+      "body": "**粗体** 与 *斜体* 与 ~~删除~~ 与 `代码` 与 [链接](https://example.com)",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "粗体 与 斜体 与 删除 与 代码 与 链接",
+          "spans": [
+            { "text": "粗体", "bold": true },
+            { "text": " 与 " },
+            { "text": "斜体", "italic": true },
+            { "text": " 与 " },
+            { "text": "删除", "strike": true },
+            { "text": " 与 " },
+            { "text": "代码", "code": true },
+            { "text": " 与 " },
+            { "text": "链接", "link": "https://example.com" }
+          ]
+        }
+      ]
+    }
+  ]
+}

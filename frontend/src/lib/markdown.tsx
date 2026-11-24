@@ -24,7 +24,15 @@ export function spansToHtml(spans: Span[] | null | undefined): string {
   return (spans ?? []).map(spanToHtml).join("");
 }
 
-function pushSpan(out: Span[], text: string, marks: Omit<Span, "text">) {
+interface InlineStyle {
+  bold?: boolean;
+  italic?: boolean;
+  strike?: boolean;
+  code?: boolean;
+  link?: string;
+}
+
+function pushSpan(out: Span[], text: string, marks: InlineStyle) {
   if (!text) return;
   const last = out[out.length - 1];
   if (
@@ -39,52 +47,6 @@ function pushSpan(out: Span[], text: string, marks: Omit<Span, "text">) {
     return;
   }
   out.push({ text, ...marks });
-}
-
-const BLOCK_TAGS = new Set(["DIV", "P", "LI", "H1", "H2", "H3", "BLOCKQUOTE"]);
-
-/** Converts edited contentEditable DOM into flat inline spans. */
-export function spansFromDOM(root: HTMLElement): Span[] {
-  const out: Span[] = [];
-  const walk = (node: Node, marks: Omit<Span, "text">) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      pushSpan(out, node.textContent ?? "", marks);
-      return;
-    }
-    if (!(node instanceof HTMLElement)) return;
-    const tag = node.tagName;
-    if (tag === "BR") {
-      pushSpan(out, "\n", marks);
-      return;
-    }
-    const next: Omit<Span, "text"> = { ...marks };
-    if (tag === "B" || tag === "STRONG" || node.style.fontWeight === "bold" || node.style.fontWeight === "700") next.bold = true;
-    if (tag === "I" || tag === "EM" || node.style.fontStyle === "italic") next.italic = true;
-    if (tag === "S" || tag === "DEL" || tag === "STRIKE" || node.style.textDecoration.includes("line-through")) next.strike = true;
-    if (tag === "CODE") next.code = true;
-    if (tag === "A") next.link = node.getAttribute("href") ?? undefined;
-    if (BLOCK_TAGS.has(tag) && out.length > 0 && !out[out.length - 1].text.endsWith("\n")) {
-      pushSpan(out, "\n", marks);
-    }
-    node.childNodes.forEach((child) => walk(child, next));
-  };
-  root.childNodes.forEach((child) => walk(child, {}));
-  // Trim a trailing newline introduced by a wrapped block.
-  while (out.length > 0) {
-    const last = out[out.length - 1];
-    last.text = last.text.replace(/\n$/, "");
-    if (last.text) break;
-    out.pop();
-  }
-  return out;
-}
-
-interface InlineStyle {
-  bold?: boolean;
-  italic?: boolean;
-  strike?: boolean;
-  code?: boolean;
-  link?: string;
 }
 
 /** Parses the supported inline Markdown subset, used when a block blurs. */
@@ -309,10 +271,13 @@ export function blocksFromMarkdown(source: string): Block[] {
       push("table", rows.flat().join(" "), { rows });
       continue;
     }
-    if (line.startsWith("```")) {
-      const language = line.slice(3).trim();
+    const fence = line.match(/^(`{3,}|~{3,})\s*(.*)$/);
+    if (fence) {
+      const marker = fence[1][0];
+      const language = fence[2].trim();
+      const closing = new RegExp(`^\\${marker}{${fence[1].length},}\\s*$`);
       const code: string[] = [];
-      for (i++; i < lines.length && lines[i].trim() !== "```"; i++) code.push(lines[i]);
+      for (i++; i < lines.length && !closing.test(lines[i].trim()); i++) code.push(lines[i]);
       push("code", code.join("\n"), { language });
       continue;
     }

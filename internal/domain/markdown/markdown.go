@@ -143,7 +143,7 @@ func heading(s string) (level int, text string, ok bool) {
 }
 
 func listItem(s string) (kind domain.BlockType, checked bool, text string, ok bool) {
-	if strings.HasPrefix(s, "- ") || strings.HasPrefix(s, "* ") {
+	if strings.HasPrefix(s, "- ") || strings.HasPrefix(s, "* ") || strings.HasPrefix(s, "+ ") {
 		rest := s[2:]
 		lower := strings.ToLower(rest)
 		if strings.HasPrefix(lower, "[ ] ") {
