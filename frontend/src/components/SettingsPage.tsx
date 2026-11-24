@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
-import type { BackupResult, RestoreProgress, Settings, SyncLog, SyncStatus, Tag, UpdateInfo, UpdateProgress } from "../types";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Backend } from "../backend";
-import { onAppEvent } from "../backend";
+import { SettingsController } from "../lib/settings";
 import { humanBytes, relativeTime } from "../lib/format";
 import { Onboarding } from "./Onboarding";
 import { CheckIcon, DownloadIcon, RefreshIcon } from "./Icons";
@@ -66,123 +65,41 @@ export function SettingsPage({
   onSettingsChanged: () => void;
   onError: (message: string) => void;
 }) {
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [sync, setSync] = useState<SyncStatus | null>(null);
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [errors, setErrors] = useState<SyncLog[]>([]);
-  const [hotkey, setHotkey] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [backup, setBackup] = useState<BackupResult | null>(null);
-  const [logsPath, setLogsPath] = useState("");
-  const [restore, setRestore] = useState<RestoreProgress | null>(null);
-  const [update, setUpdate] = useState<UpdateInfo | null>(null);
-  const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
-  const [updateBusy, setUpdateBusy] = useState(false);
-  const [updateError, setUpdateError] = useState("");
-  const [mcpPort, setMcpPort] = useState("8765");
-
-  const reload = async () => {
-    const [s, st, nextTags, nextErrors] = await Promise.all([
-      backend.settings(),
-      backend.syncStatus(),
-      backend.tags(),
-      backend.errorLogs().catch(() => [] as SyncLog[]),
-    ]);
-    setSettings(s);
-    setSync(st);
-    setTags(nextTags);
-    setErrors(nextErrors);
-    setHotkey(s.hotkey);
-    setMcpPort(String(s.mcp_port));
-  };
+  const controllerRef = useRef<SettingsController | null>(null);
+  if (!controllerRef.current) controllerRef.current = new SettingsController(backend);
+  const controller = controllerRef.current;
+  const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
 
   useEffect(() => {
-    void reload().catch((e) => onError(e instanceof Error ? e.message : String(e)));
-    void checkUpdates(true);
-    const offRestore = onAppEvent("restore:progress", (progress) => setRestore(progress as RestoreProgress));
-    const offAvailable = onAppEvent("update:available", (info) => {
-      if (info && typeof info === "object") setUpdate(info as UpdateInfo);
-    });
-    const offProgress = onAppEvent("update:progress", (progress) => {
-      setUpdateProgress(progress as UpdateProgress);
-      setUpdateBusy(true);
-    });
-    return () => {
-      offRestore();
-      offAvailable();
-      offProgress();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    controller.onChanged = onSettingsChanged;
+    controller.onError = onError;
+  }, [controller, onSettingsChanged, onError]);
 
-  const checkUpdates = async (silent = false) => {
-    setUpdateBusy(true);
-    if (!silent) {
-      setUpdateError("");
-      setMessage("");
-    }
-    try {
-      const info = await backend.checkForUpdates();
-      setUpdate(info);
-      setUpdateError("");
-      if (!silent) setMessage(info.available ? `发现新版本 v${info.latest_version}` : "当前已是最新版本");
-    } catch (e) {
-      if (!silent) setUpdateError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setUpdateBusy(false);
-    }
-  };
+  useEffect(() => {
+    void controller.load();
+    void controller.checkUpdates(true);
+    return controller.attachEvents();
+  }, [controller]);
 
-  const installUpdate = async () => {
-    setUpdateBusy(true);
-    setUpdateError("");
-    setMessage("");
-    setUpdateProgress({ phase: "preparing", percent: 0, message: "正在准备下载更新…" });
-    let started = false;
-    try {
-      await backend.installUpdate();
-      started = true;
-      setMessage("安装程序已启动，memo 即将重启");
-    } catch (e) {
-      setUpdateProgress(null);
-      const text = e instanceof Error ? e.message : String(e);
-      setUpdateError(text);
-      onError(text);
-    } finally {
-      if (!started) setUpdateBusy(false);
-    }
-  };
-
-  const openReleasePage = async () => {
-    try {
-      await backend.openReleasePage();
-    } catch (e) {
-      const text = e instanceof Error ? e.message : String(e);
-      setUpdateError(text);
-      onError(text);
-    }
-  };
-
-  const run = async (fn: () => Promise<void>, success?: string) => {
-    setBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      await fn();
-      if (success) setMessage(success);
-      await reload();
-      onSettingsChanged();
-    } catch (e) {
-      const text = e instanceof Error ? e.message : String(e);
-      setError(text);
-      onError(text);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const {
+    settings,
+    sync,
+    tags,
+    errors,
+    hotkey,
+    mcpPort,
+    backup,
+    restore,
+    logsPath,
+    update,
+    updateProgress,
+    updateBusy,
+    updateError,
+    message,
+    error,
+    busy,
+  } = state;
 
   if (!settings) {
     return (
@@ -213,7 +130,7 @@ export function SettingsPage({
                   key={theme}
                   type="button"
                   className={settings.theme === theme ? "is-active" : ""}
-                  onClick={() => void run(() => backend.setTheme(theme), "主题已更新")}
+                  onClick={() => void controller.perform(() => backend.setTheme(theme), "主题已更新")}
                 >
                   {theme === "light" ? "浅色" : theme === "dark" ? "深色" : "跟随系统"}
                 </button>
@@ -223,8 +140,8 @@ export function SettingsPage({
           <div className="settings-row">
             <span>呼出快捷键</span>
             <div className="inline-form">
-              <input value={hotkey} onChange={(e) => setHotkey(e.target.value)} spellCheck={false} aria-label="呼出快捷键" />
-              <button type="button" className="secondary-button" disabled={busy} onClick={() => void run(() => backend.setHotkey(hotkey), "快捷键已保存")}>
+              <input value={hotkey} onChange={(e) => controller.setHotkey(e.target.value)} spellCheck={false} aria-label="呼出快捷键" />
+              <button type="button" className="secondary-button" disabled={busy} onClick={() => void controller.perform(() => backend.setHotkey(hotkey), "快捷键已保存")}>
                 保存
               </button>
             </div>
@@ -236,14 +153,14 @@ export function SettingsPage({
               <button
                 type="button"
                 className={settings.submit_on_enter ? "is-active" : ""}
-                onClick={() => void run(() => backend.setSubmitOnEnter(true), "编辑快捷键已更新")}
+                onClick={() => void controller.perform(() => backend.setSubmitOnEnter(true), "编辑快捷键已更新")}
               >
                 Enter 保存
               </button>
               <button
                 type="button"
                 className={!settings.submit_on_enter ? "is-active" : ""}
-                onClick={() => void run(() => backend.setSubmitOnEnter(false), "编辑快捷键已更新")}
+                onClick={() => void controller.perform(() => backend.setSubmitOnEnter(false), "编辑快捷键已更新")}
               >
                 Shift+Enter 保存
               </button>
@@ -257,7 +174,7 @@ export function SettingsPage({
           <Toggle
             label="开机时启动 memo"
             checked={settings.start_at_login}
-            onChange={(value) => void run(() => backend.setStartAtLogin(value), "启动设置已更新")}
+            onChange={(value) => void controller.perform(() => backend.setStartAtLogin(value), "启动设置已更新")}
           />
         </Card>
 
@@ -274,11 +191,7 @@ export function SettingsPage({
               type="button"
               className="secondary-button"
               disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  setBackup(await backend.exportBackup());
-                }, "备份完成")
-              }
+              onClick={() => void controller.exportBackup()}
             >
               <DownloadIcon size={15} /> 导出备份
             </button>
@@ -286,7 +199,7 @@ export function SettingsPage({
               type="button"
               className="secondary-button"
               disabled={busy}
-              onClick={() => void run(() => backend.rebuildIndex(), "搜索索引已重建")}
+              onClick={() => void controller.perform(() => backend.rebuildIndex(), "搜索索引已重建")}
             >
               <RefreshIcon size={15} /> 重建搜索索引
             </button>
@@ -299,7 +212,7 @@ export function SettingsPage({
                   "这会删除本机全部笔记、标签与附件，并断开 Notion、清除系统钥匙串中的令牌。Notion 归档本身不会被删除。确定继续？",
                 );
                 if (!confirmed) return;
-                void run(() => backend.deleteLocalData(), "本地数据已删除，Notion 已断开");
+                void controller.perform(() => backend.deleteLocalData(), "本地数据已删除，Notion 已断开");
               }}
             >
               删除全部本地数据
@@ -318,7 +231,7 @@ export function SettingsPage({
             <span>保留期限</span>
             <select
               value={settings.retention_days}
-              onChange={(e) => void run(() => backend.setRetention(Number(e.target.value), settings.immediate_eviction), "保留策略已更新")}
+              onChange={(e) => void controller.perform(() => backend.setRetention(Number(e.target.value), settings.immediate_eviction), "保留策略已更新")}
             >
               <option value={7}>7 天</option>
               <option value={30}>30 天</option>
@@ -329,7 +242,7 @@ export function SettingsPage({
           <Toggle
             label="同步完成后立即清理"
             checked={settings.immediate_eviction}
-            onChange={(value) => void run(() => backend.setRetention(settings.retention_days, value), "保留策略已更新")}
+            onChange={(value) => void controller.perform(() => backend.setRetention(settings.retention_days, value), "保留策略已更新")}
           />
           <p className="fine-print">清理后正文和附件不再占本地磁盘，但 body_text、标签和搜索索引保留；打开时会从 Notion 恢复。置顶「保留本地」的笔记永远不清理。</p>
         </Card>
@@ -347,7 +260,7 @@ export function SettingsPage({
                   onClick={() => {
                     const name = window.prompt(`重命名 #${tag.name}`, tag.name);
                     if (!name || name.trim() === tag.name) return;
-                    void run(() => backend.renameTag(tag.id, name).then(() => undefined), "标签已重命名");
+                    void controller.perform(() => backend.renameTag(tag.id, name).then(() => undefined), "标签已重命名");
                   }}
                 >
                   重命名
@@ -358,7 +271,7 @@ export function SettingsPage({
                   onChange={(e) => {
                     const target = e.target.value;
                     if (!target) return;
-                    void run(() => backend.mergeTags(tag.id, target), "标签已合并");
+                    void controller.perform(() => backend.mergeTags(tag.id, target), "标签已合并");
                   }}
                 >
                   <option value="">合并到…</option>
@@ -376,7 +289,7 @@ export function SettingsPage({
                   aria-label={`删除标签 ${tag.name}`}
                   onClick={() => {
                     if (!window.confirm(`从所有笔记中移除 #${tag.name}？`)) return;
-                    void run(() => backend.deleteTag(tag.id), "标签已删除");
+                    void controller.perform(() => backend.deleteTag(tag.id), "标签已删除");
                   }}
                 >
                   ×
@@ -400,27 +313,22 @@ export function SettingsPage({
               <Toggle
                 label="启用 Notion 同步"
                 checked={settings.sync_enabled}
-                onChange={(value) => void run(() => backend.setSyncEnabled(value), value ? "同步已开启" : "同步已关闭")}
+                onChange={(value) => void controller.perform(() => backend.setSyncEnabled(value), value ? "同步已开启" : "同步已关闭")}
               />
               <Toggle
                 label="暂停同步"
                 checked={settings.sync_paused}
-                onChange={(value) => void run(() => backend.setSyncPaused(value), value ? "同步已暂停" : "同步已恢复")}
+                onChange={(value) => void controller.perform(() => backend.setSyncPaused(value), value ? "同步已暂停" : "同步已恢复")}
               />
               <div className="button-row">
-                <button type="button" className="secondary-button" disabled={busy} onClick={() => void run(() => backend.syncNow(), "同步完成")}>
+                <button type="button" className="secondary-button" disabled={busy} onClick={() => void controller.perform(() => backend.syncNow(), "同步完成")}>
                   立即同步
                 </button>
                 <button
                   type="button"
                   className="secondary-button"
                   disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      setRestore(null);
-                      setRestore(await backend.restoreAll());
-                    }, "恢复完成")
-                  }
+                  onClick={() => void controller.restoreAll()}
                 >
                   {busy ? "恢复中…" : "从 Notion 恢复全部"}
                 </button>
@@ -428,7 +336,7 @@ export function SettingsPage({
                   type="button"
                   className="secondary-button danger"
                   disabled={busy}
-                  onClick={() => void run(() => backend.disconnect(), "已断开 Notion")}
+                  onClick={() => void controller.perform(() => backend.disconnect(), "已断开 Notion")}
                 >
                   断开连接
                 </button>
@@ -468,7 +376,7 @@ export function SettingsPage({
           <Toggle
             label="启用 MCP 服务"
             checked={settings.mcp_enabled}
-            onChange={(value) => void run(() => backend.setMCP(value, Number(mcpPort) || settings.mcp_port), value ? "MCP 服务已启用" : "MCP 服务已关闭")}
+            onChange={(value) => void controller.perform(() => backend.setMCP(value, Number(mcpPort) || settings.mcp_port), value ? "MCP 服务已启用" : "MCP 服务已关闭")}
           />
           <div className="settings-row">
             <span>监听端口</span>
@@ -478,14 +386,14 @@ export function SettingsPage({
                 min={1024}
                 max={65535}
                 value={mcpPort}
-                onChange={(e) => setMcpPort(e.target.value)}
+                onChange={(e) => controller.setMcpPort(e.target.value)}
                 aria-label="MCP 端口"
               />
               <button
                 type="button"
                 className="secondary-button"
                 disabled={busy}
-                onClick={() => void run(() => backend.setMCP(settings.mcp_enabled, Number(mcpPort)), "MCP 端口已保存")}
+                onClick={() => void controller.perform(() => backend.setMCP(settings.mcp_enabled, Number(mcpPort)), "MCP 端口已保存")}
               >
                 保存
               </button>
@@ -504,7 +412,7 @@ export function SettingsPage({
 
         <Card title="错误日志" hint="同步事件与界面错误共用本地日志；导出时会自动隐藏令牌。">
           <div className="button-row">
-            <button type="button" className="secondary-button" disabled={busy} onClick={() => void reload().catch((e) => onError(e instanceof Error ? e.message : String(e)))}>
+            <button type="button" className="secondary-button" disabled={busy} onClick={() => void controller.load().catch((e) => onError(e instanceof Error ? e.message : String(e)))}>
               <RefreshIcon size={15} /> 刷新日志
             </button>
             <button
@@ -513,7 +421,7 @@ export function SettingsPage({
               disabled={busy || (errors.length === 0 && (sync?.logs ?? []).length === 0)}
               onClick={() => {
                 if (!window.confirm("清空本地日志？同步事件和错误记录都会被删除，此操作不可撤销。")) return;
-                void run(() => backend.clearLogs(), "日志已清空");
+                void controller.perform(() => backend.clearLogs(), "日志已清空");
               }}
             >
               清空日志
@@ -522,11 +430,7 @@ export function SettingsPage({
               type="button"
               className="secondary-button"
               disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  setLogsPath(await backend.exportLogs());
-                }, "错误日志已导出")
-              }
+              onClick={() => void controller.exportLogs()}
             >
               <DownloadIcon size={15} /> 导出错误日志
             </button>
@@ -534,19 +438,7 @@ export function SettingsPage({
               type="button"
               className="secondary-button"
               disabled={errors.length === 0}
-              onClick={() => {
-                const text = errors
-                  .map((log) => `[${new Date(log.at).toISOString()}] ${log.level} ${log.event}\n${log.message}`)
-                  .join("\n\n");
-                void navigator.clipboard
-                  .writeText(text)
-                  .then(() => setMessage("错误日志已复制"))
-                  .catch((e) => {
-                    const detail = e instanceof Error ? e.message : String(e);
-                    setError(detail);
-                    onError(detail);
-                  });
-              }}
+              onClick={() => void controller.copyErrors()}
             >
               复制日志
             </button>
@@ -591,7 +483,7 @@ export function SettingsPage({
               type="button"
               className="secondary-button"
               disabled={updateBusy}
-              onClick={() => void checkUpdates()}
+              onClick={() => void controller.checkUpdates()}
             >
               <RefreshIcon size={15} /> {updateBusy && !updateProgress ? "检查中…" : "检查更新"}
             </button>
@@ -609,13 +501,13 @@ export function SettingsPage({
               {update.notes && <pre className="update-notes">{update.notes}</pre>}
               <div className="button-row">
                 {update.can_install ? (
-                  <button type="button" className="primary-button" disabled={updateBusy} onClick={() => void installUpdate()}>
+                  <button type="button" className="primary-button" disabled={updateBusy} onClick={() => void controller.installUpdate()}>
                     <DownloadIcon size={15} /> {updateBusy ? "正在更新…" : `安装 v${update.latest_version} 并重启`}
                   </button>
                 ) : (
                   <span className="fine-print">当前平台暂不支持自动安装，请从发布页手动下载。</span>
                 )}
-                <button type="button" className="secondary-button" disabled={updateBusy} onClick={() => void openReleasePage()}>
+                <button type="button" className="secondary-button" disabled={updateBusy} onClick={() => void controller.openReleasePage()}>
                   打开发布页
                 </button>
               </div>
@@ -653,7 +545,7 @@ export function SettingsPage({
           connectOnly
           onDone={() => {
             setConnecting(false);
-            void run(async () => undefined, "Notion 已连接");
+            void controller.perform(async () => undefined, "Notion 已连接");
           }}
           onSkip={() => setConnecting(false)}
         />
