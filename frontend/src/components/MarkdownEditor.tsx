@@ -4,14 +4,14 @@ import "@atomic-editor/editor/styles.css";
 import { Prec, type Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, keymap, placeholder as cmPlaceholder, type ViewUpdate } from "@codemirror/view";
 import type { Attachment } from "../types";
-import type { Backend } from "../backend";
+import type { MarkdownEditorBackend } from "../backend";
 import { blockText, blocksFromMarkdown, safeLinkUrl } from "../lib/markdown";
 import { extractTagToken, normalizeTag, removeTagToken, type TagToken } from "../lib/tag";
 import { countWords, humanBytes } from "../lib/format";
 import { CloseIcon, FileIcon, ImageIcon, PaperclipIcon } from "./Icons";
 
 interface EditorProps {
-  backend: Backend;
+  backend: MarkdownEditorBackend;
   body: string;
   tags: string[];
   attachments: Attachment[];
@@ -561,7 +561,7 @@ export function AttachmentBlock({
   attachment,
   onRemove,
 }: {
-  backend: Backend;
+  backend: MarkdownEditorBackend;
   attachment: Attachment;
   onRemove?: () => void;
 }) {

@@ -99,6 +99,100 @@ export interface Backend {
   saveStickyPosition(x: number, y: number): Promise<void>;
 }
 
+// Callers depend on the slice they actually use. Backend is the composition of
+// those slices; the two adapters satisfy the whole surface.
+export type MarkdownEditorBackend = Pick<
+  Backend,
+  "attachmentData" | "attachmentThumb" | "openAttachment" | "openURL" | "suggestTags"
+>;
+export type MemoListBackend = Pick<Backend, "list" | "remove" | "purgeMemo" | "setKeepLocal"> &
+  MarkdownEditorBackend;
+export type MemoDraftBackend = Pick<
+  Backend,
+  "create" | "createWithAttachments" | "update" | "addAttachments" | "get" | "removeAttachment"
+> &
+  MarkdownEditorBackend;
+export type MemoSheetBackend = Pick<
+  Backend,
+  | "get"
+  | "hydrate"
+  | "update"
+  | "remove"
+  | "purgeMemo"
+  | "restore"
+  | "setKeepLocal"
+  | "addAttachments"
+  | "removeAttachment"
+> &
+  MarkdownEditorBackend;
+export type OnboardingBackend = Pick<
+  Backend,
+  | "settings"
+  | "setHotkey"
+  | "setStartAtLogin"
+  | "completeOnboarding"
+  | "connect"
+  | "parentPages"
+  | "previewArchiveDatabase"
+  | "resolveArchiveTarget"
+  | "validateToken"
+>;
+export type StatsBackend = Pick<Backend, "dashboard">;
+export type SettingsControllerBackend = Pick<
+  Backend,
+  | "settings"
+  | "syncStatus"
+  | "tags"
+  | "errorLogs"
+  | "setTheme"
+  | "exportBackup"
+  | "restoreAll"
+  | "exportLogs"
+  | "checkForUpdates"
+  | "installUpdate"
+  | "openReleasePage"
+>;
+export type SettingsPageBackend = SettingsControllerBackend &
+  OnboardingBackend &
+  Pick<
+    Backend,
+    | "clearLogs"
+    | "deleteLocalData"
+    | "deleteTag"
+    | "disconnect"
+    | "mergeTags"
+    | "openDataDir"
+    | "rebuildIndex"
+    | "renameTag"
+    | "setHotkey"
+    | "setMCP"
+    | "setRetention"
+    | "setStartAtLogin"
+    | "setSubmitOnEnter"
+    | "setSyncEnabled"
+    | "setSyncPaused"
+    | "syncNow"
+  >;
+export type StickyBackend = Pick<
+  Backend,
+  | "reportError"
+  | "tags"
+  | "settings"
+  | "syncStatus"
+  | "create"
+  | "createWithAttachments"
+  | "update"
+  | "get"
+  | "addAttachments"
+  | "removeAttachment"
+  | "attachmentData"
+  | "attachmentThumb"
+  | "openAttachment"
+  | "openURL"
+  | "suggestTags"
+  | "hideSticky"
+>;
+
 export function isWailsRuntime(): boolean {
   if (typeof window === "undefined") return false;
   const wails = (window as unknown as { _wails?: { environment?: unknown } })._wails;

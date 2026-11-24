@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { Backend } from "../backend";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import type { SettingsPageBackend } from "../backend";
 import { SettingsController } from "../lib/settings";
 import { humanBytes, relativeTime } from "../lib/format";
 import { Onboarding } from "./Onboarding";
@@ -58,29 +58,37 @@ function Toggle({
 
 export function SettingsPage({
   backend,
+  controller: sharedController,
   onSettingsChanged,
   onError,
 }: {
-  backend: Backend;
+  backend: SettingsPageBackend;
+  /** The shell's instance. Omit to let the page own its lifecycle. */
+  controller?: SettingsController;
   onSettingsChanged: () => void;
   onError: (message: string) => void;
 }) {
   const [connecting, setConnecting] = useState(false);
-  const controllerRef = useRef<SettingsController | null>(null);
-  if (!controllerRef.current) controllerRef.current = new SettingsController(backend);
-  const controller = controllerRef.current;
+  const ownedController = useMemo(
+    () => (sharedController ? null : new SettingsController(backend)),
+    [backend, sharedController],
+  );
+  const controller = sharedController ?? ownedController!;
+  const ownsController = !sharedController;
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
 
   useEffect(() => {
+    if (!ownsController) return;
     controller.onChanged = onSettingsChanged;
     controller.onError = onError;
-  }, [controller, onSettingsChanged, onError]);
+  }, [controller, onError, onSettingsChanged, ownsController]);
 
   useEffect(() => {
+    if (!ownsController) return;
     void controller.load();
     void controller.checkUpdates(true);
     return controller.attachEvents();
-  }, [controller]);
+  }, [controller, ownsController]);
 
   const {
     settings,

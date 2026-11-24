@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Attachment, Memo } from "../types";
-import type { Backend } from "../backend";
+import type { MemoSheetBackend } from "../backend";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { formatDate } from "../lib/format";
 import { fileToBase64 } from "../lib/files";
@@ -16,7 +16,7 @@ export function MemoSheet({
   submitOnEnter = true,
 }: {
   memo: Memo;
-  backend: Backend;
+  backend: MemoSheetBackend;
   onClose: () => void;
   onChanged: (memo: Memo | null) => void;
   onError: (message: string) => void;

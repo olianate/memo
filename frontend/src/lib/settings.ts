@@ -1,4 +1,4 @@
-import type { Backend } from "../backend";
+import type { SettingsControllerBackend } from "../backend";
 import { onAppEvent } from "../backend";
 import type {
   BackupResult,
@@ -81,13 +81,13 @@ export class SettingsController {
   onChanged: () => void;
   onError: (message: string) => void;
 
-  private readonly backend: Backend;
+  private readonly backend: SettingsControllerBackend;
   private readonly clipboard: (text: string) => Promise<void>;
   private readonly subscribeTo: (event: string, handler: EventHandler) => () => void;
   private state: SettingsState = { ...EMPTY };
   private readonly listeners = new Set<Listener>();
 
-  constructor(backend: Backend, options: SettingsOptions = {}) {
+  constructor(backend: SettingsControllerBackend, options: SettingsOptions = {}) {
     this.backend = backend;
     this.onChanged = options.onChanged ?? (() => {});
     this.onError = options.onError ?? (() => {});
@@ -104,12 +104,23 @@ export class SettingsController {
 
   getSnapshot = (): SettingsState => this.state;
 
+  /** Keeps a streamed sync status current without reloading the whole page. */
+  setSync = (sync: SyncStatus) => this.patch({ sync });
+
   setHotkey = (value: string) => this.patch({ hotkey: value });
 
   setMcpPort = (value: string) => this.patch({ mcpPort: value });
 
-  /** Reloads settings, sync status, tags, and error logs in parallel. */
+  /** Reloads the snapshot and seeds the editable fields. */
   async load(): Promise<void> {
+    await this.reload(true);
+  }
+
+  /**
+   * Reloads settings, sync status, tags, and error logs in parallel. Background
+   * refreshes leave unsaved hotkey and MCP port text alone.
+   */
+  async reload(seedDrafts = false): Promise<void> {
     try {
       const [settings, sync, tags, errors] = await Promise.all([
         this.backend.settings(),
@@ -122,8 +133,9 @@ export class SettingsController {
         sync,
         tags,
         errors,
-        hotkey: settings.hotkey,
-        mcpPort: String(settings.mcp_port),
+        ...(seedDrafts
+          ? { hotkey: settings.hotkey, mcpPort: String(settings.mcp_port) }
+          : {}),
       });
     } catch (error) {
       this.patch({ error: this.report(error) });
@@ -142,6 +154,17 @@ export class SettingsController {
       this.patch({ error: this.report(error) });
     } finally {
       this.patch({ busy: false });
+    }
+  }
+
+  /** Applies a theme without resetting another field's unsaved draft. */
+  async setTheme(theme: Settings["theme"]): Promise<void> {
+    this.patch({ error: "" });
+    try {
+      await this.backend.setTheme(theme);
+      await this.reload();
+    } catch (error) {
+      this.patch({ error: this.report(error) });
     }
   }
 

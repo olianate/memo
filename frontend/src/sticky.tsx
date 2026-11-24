@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Attachment, SyncStatus } from "./types";
-import type { Backend } from "./backend";
+import type { StickyBackend } from "./backend";
 import { isWailsRuntime, onAppEvent } from "./backend";
 import { wailsBackend } from "./wailsBackend";
 import { demoBackend } from "./demoBackend";
@@ -9,7 +9,7 @@ import { fileToBase64 } from "./lib/files";
 import { installGlobalErrorHandlers, reportError, setErrorSink } from "./lib/errorLog";
 import { CloseIcon, PaperclipIcon, SendIcon } from "./components/Icons";
 
-export default function StickyApp({ backend }: { backend?: Backend }) {
+export default function StickyApp({ backend }: { backend?: StickyBackend }) {
   const b = backend ?? (isWailsRuntime() ? wailsBackend : demoBackend);
   const [body, setBody] = useState("");
   const [tags, setTags] = useState<string[]>([]);

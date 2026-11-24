@@ -63,6 +63,18 @@ describe("SettingsController", () => {
     expect(state.mcpPort).toBe("8765");
   });
 
+  it("keeps unsaved drafts across a background reload", async () => {
+    const page = new SettingsController(fakeBackend());
+    await page.load();
+    page.setHotkey("CommandOrControl+Alt+M");
+    page.setMcpPort("9000");
+
+    await page.reload();
+
+    expect(page.getSnapshot().hotkey).toBe("CommandOrControl+Alt+M");
+    expect(page.getSnapshot().mcpPort).toBe("9000");
+  });
+
   it("keeps loading when the error log request fails", async () => {
     const backend = fakeBackend({ errorLogs: vi.fn(async () => Promise.reject(new Error("日志不可用"))) });
     const page = new SettingsController(backend);
@@ -111,6 +123,24 @@ describe("SettingsController", () => {
     expect(page.getSnapshot().busy).toBe(false);
     expect(onError).toHaveBeenCalledWith("端口被占用");
     expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it("applies a theme without resetting another field's draft", async () => {
+    const setTheme = vi.fn(async () => {});
+    const page = new SettingsController(
+      fakeBackend({
+        setTheme,
+        settings: vi.fn(async () => settings({ theme: "dark" })),
+      }),
+    );
+    await page.load();
+    page.setHotkey("CommandOrControl+Alt+M");
+
+    await page.setTheme("dark");
+
+    expect(setTheme).toHaveBeenCalledWith("dark");
+    expect(page.getSnapshot().settings?.theme).toBe("dark");
+    expect(page.getSnapshot().hotkey).toBe("CommandOrControl+Alt+M");
   });
 
   it("stores the backup result and the restore progress", async () => {

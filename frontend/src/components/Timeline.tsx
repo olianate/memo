@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Attachment, Memo } from "../types";
-import type { Backend } from "../backend";
+import type { MemoListBackend } from "../backend";
 import { BlockPreview } from "../lib/markdown";
 import { memoPreview } from "../lib/preview";
 import { groupByDay } from "../lib/group";
@@ -20,7 +20,7 @@ export function Timeline({
   emptyHint = "在上面的输入框记下第一个想法。Enter 保存，Shift+Enter 换行。",
 }: {
   memos: Memo[];
-  backend: Backend;
+  backend: MemoListBackend;
   loading: boolean;
   onOpen: (memo: Memo) => void;
   onChanged: () => void;
@@ -212,7 +212,7 @@ function TimelineImages({
   collapsed,
   onError,
 }: {
-  backend: Backend;
+  backend: MemoListBackend;
   attachments: Attachment[];
   collapsed: boolean;
   onError: (message: string) => void;
@@ -228,7 +228,7 @@ function TimelineImages({
   );
 }
 
-function TimelineImage({ backend, attachment, onError }: { backend: Backend; attachment: Attachment; onError: (message: string) => void }) {
+function TimelineImage({ backend, attachment, onError }: { backend: MemoListBackend; attachment: Attachment; onError: (message: string) => void }) {
   const [thumb, setThumb] = useState<string | null>(null);
   const [full, setFull] = useState<string | null>(null);
 

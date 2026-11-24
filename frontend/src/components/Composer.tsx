@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { Attachment } from "../types";
-import type { Backend } from "../backend";
+import type { MemoDraftBackend } from "../backend";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { SendIcon } from "./Icons";
 import { fileToBase64 } from "../lib/files";
@@ -11,7 +11,7 @@ export function Composer({
   onError,
   submitOnEnter = true,
 }: {
-  backend: Backend;
+  backend: MemoDraftBackend;
   onSaved: () => void;
   onError: (message: string) => void;
   submitOnEnter?: boolean;
