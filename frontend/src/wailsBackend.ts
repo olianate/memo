@@ -15,6 +15,7 @@ import type {
   SyncLog,
   SyncStatus,
   Tag,
+  UpdateInfo,
   Workspace,
 } from "./types";
 import type { Backend } from "./backend";
@@ -27,6 +28,7 @@ import * as StatsSvc from "../bindings/github.com/olianate/memo/internal/service
 import * as SettingsSvc from "../bindings/github.com/olianate/memo/internal/services/settingsservice.js";
 import * as SyncSvc from "../bindings/github.com/olianate/memo/internal/services/syncservice.js";
 import * as PlatformSvc from "../bindings/github.com/olianate/memo/internal/services/platformservice.js";
+import * as UpdateSvc from "../bindings/github.com/olianate/memo/internal/services/updateservice.js";
 
 const asMemo = (m: any): Memo => ({
   ...m,
@@ -108,6 +110,9 @@ export const wailsBackend: Backend = {
   async openAttachment(id) {
     await MemoSvc.OpenAttachment(id);
   },
+  async openURL(url) {
+    await PlatformSvc.OpenURL(url);
+  },
 
   async tags() {
     return ((await TagSvc.List()) ?? []).map(asTag);
@@ -159,6 +164,9 @@ export const wailsBackend: Backend = {
   async setRetention(days, immediate) {
     await SettingsSvc.SetRetention(days, immediate);
   },
+  async setMCP(enabled, port) {
+    await SettingsSvc.SetMCP(enabled, port);
+  },
   async rebuildIndex() {
     await SettingsSvc.RebuildIndex();
   },
@@ -182,6 +190,16 @@ export const wailsBackend: Backend = {
   },
   async completeOnboarding() {
     await SettingsSvc.CompleteOnboarding();
+  },
+
+  async checkForUpdates(): Promise<UpdateInfo> {
+    return await UpdateSvc.Check();
+  },
+  async installUpdate() {
+    await UpdateSvc.Install();
+  },
+  async openReleasePage() {
+    await UpdateSvc.OpenReleasePage();
   },
 
   async syncStatus(): Promise<SyncStatus> {

@@ -537,6 +537,7 @@ type PlatformHooks interface {
 	Quit()
 	SaveStickyPosition(x, y int) error
 	StickyPosition() (int, int)
+	OpenURL(url string) error
 }
 
 // NewPlatformService builds the platform boundary.
@@ -570,6 +571,9 @@ func (s *PlatformService) SaveStickyPosition(x, y int) error {
 
 // StickyPosition returns the remembered sticky position.
 func (s *PlatformService) StickyPosition() (int, int) { return s.hooks.StickyPosition() }
+
+// OpenURL opens an http(s) link in the system browser.
+func (s *PlatformService) OpenURL(url string) error { return s.hooks.OpenURL(url) }
 
 // CurrentTheme is read by the frontend before the first paint.
 func (s *PlatformService) CurrentTheme() string {

@@ -211,7 +211,23 @@ export function removeSpanRange(spans: Span[], start: number, end: number): Span
   return merged;
 }
 
-export function InlineSpans({ spans }: { spans?: Span[] | null }) {
+/** Accepts http(s), mailto, and bare domains; rejects other schemes. */
+export function safeLinkUrl(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  if (/^(https?:|mailto:)/i.test(value)) return value;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
+  if (/^[\w-]+(\.[\w-]+)+([/?#].*)?$/i.test(value)) return `https://${value}`;
+  return null;
+}
+
+export function InlineSpans({
+  spans,
+  onOpenLink,
+}: {
+  spans?: Span[] | null;
+  onOpenLink?: (url: string) => void;
+}) {
   return (
     <>
       {(spans ?? []).map((span, index) => {
@@ -225,7 +241,11 @@ export function InlineSpans({ spans }: { spans?: Span[] | null }) {
             <a
               href={span.link}
               title={span.link}
-              onClick={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (onOpenLink) onOpenLink(span.link as string);
+              }}
               rel="noreferrer"
             >
               {node}
@@ -243,14 +263,22 @@ export function blockText(block: Block): string {
 }
 
 /** Renders a memo body's text blocks for a timeline card or sheet preview. */
-export function BlockPreview({ blocks, limit = 6 }: { blocks: Block[] | null; limit?: number }) {
+export function BlockPreview({
+  blocks,
+  limit = 6,
+  onOpenLink,
+}: {
+  blocks: Block[] | null;
+  limit?: number;
+  onOpenLink?: (url: string) => void;
+}) {
   const visible = (blocks ?? []).slice(0, limit);
   return (
     <>
       {visible.map((block) => {
         if (block.type === "divider") return <hr key={block.id} className="md-divider" />;
         if (block.type === "image" || block.type === "file") return null;
-        const content = <InlineSpans spans={block.spans} />;
+        const content = <InlineSpans spans={block.spans} onOpenLink={onOpenLink} />;
         switch (block.type) {
           case "heading":
             return (

@@ -20,6 +20,8 @@ type Hooks interface {
 	ApplyHotkey(accelerator string) error
 	ApplyStartAtLogin(enabled bool) error
 	OpenPath(path string) error
+	ApplyMCP(enabled bool, port int) error
+	MCPStatus() (running bool, endpoint string, lastErr string)
 }
 
 // SettingsDTO mirrors the persisted settings for the UI.
@@ -37,6 +39,11 @@ type SettingsDTO struct {
 	DataDir            string `json:"data_dir"`
 	Onboarded          bool   `json:"onboarded"`
 	HotkeyError        string `json:"hotkey_error,omitempty"`
+	MCPEnabled         bool   `json:"mcp_enabled"`
+	MCPPort            int    `json:"mcp_port"`
+	MCPRunning         bool   `json:"mcp_running"`
+	MCPEndpoint        string `json:"mcp_endpoint,omitempty"`
+	MCPError           string `json:"mcp_error,omitempty"`
 	Version            string `json:"version"`
 }
 
@@ -70,6 +77,11 @@ func NewSettingsService(st *store.Store, cfg *config.Store, dataDir string, hook
 func (s *SettingsService) Get() SettingsDTO {
 	ctx := context.Background()
 	limit := int64(s.cfg.Int(ctx, config.KeyWorkspaceFileLimit))
+	var mcpRunning bool
+	var mcpEndpoint, mcpErr string
+	if s.hooks != nil {
+		mcpRunning, mcpEndpoint, mcpErr = s.hooks.MCPStatus()
+	}
 	return SettingsDTO{
 		Theme:              s.cfg.Get(ctx, config.KeyTheme),
 		Hotkey:             s.cfg.Get(ctx, config.KeyHotkey),
@@ -84,6 +96,11 @@ func (s *SettingsService) Get() SettingsDTO {
 		DataDir:            s.dataDir,
 		Onboarded:          s.cfg.Bool(ctx, config.KeyOnboarded),
 		HotkeyError:        s.cfg.Get(ctx, config.KeyHotkeyError),
+		MCPEnabled:         s.cfg.Bool(ctx, config.KeyMCPEnabled),
+		MCPPort:            s.cfg.Int(ctx, config.KeyMCPPort),
+		MCPRunning:         mcpRunning,
+		MCPEndpoint:        mcpEndpoint,
+		MCPError:           mcpErr,
 		Version:            Version,
 	}
 }
@@ -120,6 +137,23 @@ func (s *SettingsService) SetStartAtLogin(enabled bool) error {
 		}
 	}
 	return s.cfg.SetBool(context.Background(), config.KeyStartAtLogin, enabled)
+}
+
+// SetMCP starts or stops the local MCP server and persists the choice.
+func (s *SettingsService) SetMCP(enabled bool, port int) error {
+	if port < 1024 || port > 65535 {
+		return errors.New("MCP 端口需在 1024 到 65535 之间")
+	}
+	if s.hooks != nil {
+		if err := s.hooks.ApplyMCP(enabled, port); err != nil {
+			return err
+		}
+	}
+	ctx := context.Background()
+	if err := s.cfg.SetInt(ctx, config.KeyMCPPort, port); err != nil {
+		return err
+	}
+	return s.cfg.SetBool(ctx, config.KeyMCPEnabled, enabled)
 }
 
 // SetRetention changes the eviction window. Accepted: 7, 30, 90, or -1 never.

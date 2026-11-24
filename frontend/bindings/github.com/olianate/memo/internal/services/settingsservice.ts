@@ -103,6 +103,13 @@ export function SetHotkey(accelerator: string): $CancellablePromise<void> {
 }
 
 /**
+ * SetMCP starts or stops the local MCP server and persists the choice.
+ */
+export function SetMCP(enabled: boolean, port: number): $CancellablePromise<void> {
+    return $Call.ByID(3160618467, enabled, port);
+}
+
+/**
  * SetRetention changes the eviction window. Accepted: 7, 30, 90, or -1 never.
  */
 export function SetRetention(days: number, immediate: boolean): $CancellablePromise<void> {

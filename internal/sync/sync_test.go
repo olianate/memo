@@ -426,6 +426,35 @@ func TestFullScanImportsRemoteMemos(t *testing.T) {
 	}
 }
 
+func TestStatusReturnsToIdleAfterPull(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, "dev-b", nil)
+	var last *Status
+	sawSyncing := false
+	e.svc.OnEvent(func(name string, data any) {
+		if name != "sync:status" {
+			return
+		}
+		st, ok := data.(Status)
+		if !ok {
+			t.Fatalf("status payload = %T", data)
+		}
+		if st.State == domain.SyncSyncing {
+			sawSyncing = true
+		}
+		last = &st
+	})
+	if err := e.svc.PullOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !sawSyncing {
+		t.Fatal("expected a syncing status event during the pull")
+	}
+	if last == nil || last.State != domain.SyncIdle || last.Pending != 0 {
+		t.Fatalf("last status = %+v", last)
+	}
+}
+
 func TestPullConflictRevisionThenUpdatedThenDevice(t *testing.T) {
 	now := time.Now().UTC()
 	if !RemoteWins(1, now, "a", 2, now.Add(-time.Hour), "b") {

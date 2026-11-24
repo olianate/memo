@@ -110,6 +110,11 @@ export interface Settings {
   data_dir: string;
   onboarded: boolean;
   hotkey_error?: string;
+  mcp_enabled: boolean;
+  mcp_port: number;
+  mcp_running: boolean;
+  mcp_endpoint?: string;
+  mcp_error?: string;
   version: string;
 }
 
@@ -223,6 +228,25 @@ export interface RestoreProgress {
   completed: number;
   failed: number;
   current_id?: string;
+}
+
+export interface UpdateInfo {
+  current_version: string;
+  latest_version: string;
+  available: boolean;
+  notes: string;
+  published_at: string;
+  release_url: string;
+  asset_name: string;
+  asset_size: number;
+  can_install: boolean;
+  checked_at: string;
+}
+
+export interface UpdateProgress {
+  phase: string;
+  percent: number;
+  message: string;
 }
 
 export interface DayCount {

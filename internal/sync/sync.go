@@ -345,10 +345,17 @@ func (s *Service) recordSuccess() {
 	s.emit("sync:status", s.Status(ctx))
 }
 
+// setBusy records whether a push or pull is in flight and notifies the UI on
+// transitions. Without the notification the last sampled "syncing" state would
+// stick in the status banner after a pull that pushed nothing.
 func (s *Service) setBusy(busy bool) {
 	s.mu.Lock()
+	changed := s.syncing != busy
 	s.syncing = busy
 	s.mu.Unlock()
+	if changed {
+		s.emit("sync:status", s.Status(context.Background()))
+	}
 }
 
 func (s *Service) emit(name string, data any) {

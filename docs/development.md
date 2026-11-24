@@ -106,7 +106,7 @@ See `adr/0001-notion-as-optional-archive.md`,
 ## Packaging
 
 The app version shown in Settings lives in `internal/services/version.go`
-(currently `1.1.0`). Keep `build/config.yml`, `build/windows/info.json` and
+(currently `1.2.0`). Keep `build/config.yml`, `build/windows/info.json` and
 `build/darwin/Info*.plist` in sync when bumping it.
 
 ### Windows NSIS installer
@@ -134,7 +134,7 @@ the production binary from `wails3 build`, then:
 ```powershell
 # Download and extract wix314-binaries.zip first:
 #   https://github.com/wixtoolset/wix3/releases/tag/wix3141rtm
-.\build\windows\msi\build.ps1 -Version 1.1.0 -WixDir C:\path\to\wix314
+.\build\windows\msi\build.ps1 -Version 1.2.0 -WixDir C:\path\to\wix314
 # -> bin/memo-windows-amd64.msi
 ```
 
@@ -153,7 +153,18 @@ wails3 task darwin:create:dmg          # bin/memo.dmg
 
 Unsigned builds need right-click → Open the first time. macOS IME behavior is an
 accepted, untested risk (gate 11 was waived for macOS); test on a Mac before any
-release. Auto-update is out of scope for v1: reinstall manually.
+release.
+
+### Updates
+
+Updates are checked from GitHub Releases at startup and every 12 hours, and on
+demand under Settings → 软件更新. The updater downloads the matching installer,
+verifies `SHA256SUMS.txt` when present, runs it silently, and relaunches memo.
+The installers remain unsigned, so Windows SmartScreen or macOS Gatekeeper may
+still ask for confirmation. On Windows the updater reuses the MSI it was
+installed from (detected via the MSI registry marker) and otherwise uses the
+NSIS installer. On macOS the new `.app` is copied over the existing bundle;
+keep a copy of the old build when testing the update path.
 
 #### macOS icon (Icon Composer)
 
@@ -179,6 +190,36 @@ workflow prints a warning when `Assets.car` is missing. Both outputs are
 regenerated per build, so `Assets.car` is gitignored while `icons.icns` stays
 committed for hosts that cannot run `actool`.
 
+### MCP server
+
+The optional MCP server (`internal/mcpserver`) exposes search, create, update
+and delete over the Streamable HTTP transport. Enable it under
+设置 → MCP 服务 and choose a local port (default `8765`). The listener binds
+`127.0.0.1` only; there is no authentication, so any local process can use it.
+The endpoint is `http://127.0.0.1:<port>/mcp`, for example:
+
+```json
+{
+  "mcpServers": {
+    "memo": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765/mcp"
+    }
+  }
+}
+```
+
+Tools: `search_memos`, `create_memo`, `update_memo`, `delete_memo`.
+`create_memo` and `update_memo` accept an `attachments` array; each item is
+either a local `path` or inline `data_base64` (with optional `name` and `mime`).
+Images are detected from the MIME type and shown as images, other files as
+attachments. `update_memo` keeps omitted fields unchanged, preserves existing
+attachments unless they are listed in `remove_attachment_ids`, and moves a memo
+to the local trash only when `delete_memo` is called. Content is Markdown; tags
+are separate from the body. Inline links use `[label](https://example.com)` and
+are reported in each tool result's `links` array as well as clickable in the
+timeline.
+
 ### GitHub Actions
 
 `.github/workflows/ci.yml` runs on every push to `main` and on every pull
@@ -191,7 +232,7 @@ steps, so it can be called as a reusable workflow.
 NSIS + MSI packages, builds the macOS universal DMG, writes `SHA256SUMS.txt` and
 publishes a GitHub Release with the stable asset names used by the README
 download links. Release notes are read from `docs/releases/<tag>.md` (for
-example `docs/releases/v1.1.0.md`); commit that file before pushing the tag.
+example `docs/releases/v1.2.0.md`); commit that file before pushing the tag.
 If it is absent, the workflow falls back to a generic summary. The workflow can
 also be triggered manually to exercise the build jobs without publishing.
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -35,14 +36,35 @@ func (s *testSecrets) SetNotionToken(_ context.Context, t string) error {
 func (s *testSecrets) ClearNotionToken(context.Context) error { s.token = ""; return nil }
 
 type testHooks struct {
-	hotkey string
-	login  bool
-	opened string
+	hotkey      string
+	login       bool
+	opened      string
+	mcpEnabled  bool
+	mcpPort     int
+	mcpRunning  bool
+	mcpEndpoint string
+	mcpErr      string
 }
 
 func (h *testHooks) ApplyHotkey(a string) error     { h.hotkey = a; return nil }
 func (h *testHooks) ApplyStartAtLogin(v bool) error { h.login = v; return nil }
 func (h *testHooks) OpenPath(p string) error        { h.opened = p; return nil }
+
+func (h *testHooks) ApplyMCP(enabled bool, port int) error {
+	h.mcpEnabled = enabled
+	h.mcpPort = port
+	h.mcpRunning = enabled
+	if enabled {
+		h.mcpEndpoint = fmt.Sprintf("http://127.0.0.1:%d/mcp", port)
+	} else {
+		h.mcpEndpoint = ""
+	}
+	return nil
+}
+
+func (h *testHooks) MCPStatus() (bool, string, string) {
+	return h.mcpRunning, h.mcpEndpoint, h.mcpErr
+}
 
 type testEnv struct {
 	store    *store.Store
@@ -285,6 +307,22 @@ func TestSettingsApplyAndBackup(t *testing.T) {
 	}
 	if err := e.settings.SetRetention(12, false); err == nil {
 		t.Fatal("invalid retention accepted")
+	}
+	if err := e.settings.SetMCP(true, 8765); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.settings.SetMCP(true, 80); err == nil {
+		t.Fatal("invalid MCP port accepted")
+	}
+	mcp := e.settings.Get()
+	if !mcp.MCPEnabled || mcp.MCPPort != 8765 || !mcp.MCPRunning || mcp.MCPEndpoint != "http://127.0.0.1:8765/mcp" {
+		t.Fatalf("mcp settings = %+v", mcp)
+	}
+	if err := e.settings.SetMCP(false, 8765); err != nil {
+		t.Fatal(err)
+	}
+	if mcp = e.settings.Get(); mcp.MCPEnabled || mcp.MCPRunning {
+		t.Fatalf("mcp did not stop: %+v", mcp)
 	}
 	got := e.settings.Get()
 	if got.Theme != "dark" || got.Hotkey != "CmdOrCtrl+Alt+Space" || !got.StartAtLogin || got.RetentionDays != 90 || !got.ImmediateEviction {

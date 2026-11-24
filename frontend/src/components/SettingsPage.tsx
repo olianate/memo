@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import type { BackupResult, RestoreProgress, Settings, SyncLog, SyncStatus, Tag } from "../types";
+import type { BackupResult, RestoreProgress, Settings, SyncLog, SyncStatus, Tag, UpdateInfo, UpdateProgress } from "../types";
 import type { Backend } from "../backend";
 import { onAppEvent } from "../backend";
-import { relativeTime } from "../lib/format";
+import { humanBytes, relativeTime } from "../lib/format";
 import { Onboarding } from "./Onboarding";
 import { CheckIcon, DownloadIcon, RefreshIcon } from "./Icons";
 
@@ -78,6 +78,11 @@ export function SettingsPage({
   const [backup, setBackup] = useState<BackupResult | null>(null);
   const [logsPath, setLogsPath] = useState("");
   const [restore, setRestore] = useState<RestoreProgress | null>(null);
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateError, setUpdateError] = useState("");
+  const [mcpPort, setMcpPort] = useState("8765");
 
   const reload = async () => {
     const [s, st, nextTags, nextErrors] = await Promise.all([
@@ -91,14 +96,75 @@ export function SettingsPage({
     setTags(nextTags);
     setErrors(nextErrors);
     setHotkey(s.hotkey);
+    setMcpPort(String(s.mcp_port));
   };
 
   useEffect(() => {
     void reload().catch((e) => onError(e instanceof Error ? e.message : String(e)));
-    const off = onAppEvent("restore:progress", (progress) => setRestore(progress as RestoreProgress));
-    return off;
+    void checkUpdates(true);
+    const offRestore = onAppEvent("restore:progress", (progress) => setRestore(progress as RestoreProgress));
+    const offAvailable = onAppEvent("update:available", (info) => {
+      if (info && typeof info === "object") setUpdate(info as UpdateInfo);
+    });
+    const offProgress = onAppEvent("update:progress", (progress) => {
+      setUpdateProgress(progress as UpdateProgress);
+      setUpdateBusy(true);
+    });
+    return () => {
+      offRestore();
+      offAvailable();
+      offProgress();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const checkUpdates = async (silent = false) => {
+    setUpdateBusy(true);
+    if (!silent) {
+      setUpdateError("");
+      setMessage("");
+    }
+    try {
+      const info = await backend.checkForUpdates();
+      setUpdate(info);
+      setUpdateError("");
+      if (!silent) setMessage(info.available ? `发现新版本 v${info.latest_version}` : "当前已是最新版本");
+    } catch (e) {
+      if (!silent) setUpdateError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
+
+  const installUpdate = async () => {
+    setUpdateBusy(true);
+    setUpdateError("");
+    setMessage("");
+    setUpdateProgress({ phase: "preparing", percent: 0, message: "正在准备下载更新…" });
+    let started = false;
+    try {
+      await backend.installUpdate();
+      started = true;
+      setMessage("安装程序已启动，memo 即将重启");
+    } catch (e) {
+      setUpdateProgress(null);
+      const text = e instanceof Error ? e.message : String(e);
+      setUpdateError(text);
+      onError(text);
+    } finally {
+      if (!started) setUpdateBusy(false);
+    }
+  };
+
+  const openReleasePage = async () => {
+    try {
+      await backend.openReleasePage();
+    } catch (e) {
+      const text = e instanceof Error ? e.message : String(e);
+      setUpdateError(text);
+      onError(text);
+    }
+  };
 
   const run = async (fn: () => Promise<void>, success?: string) => {
     setBusy(true);
@@ -374,6 +440,44 @@ export function SettingsPage({
           )}
         </Card>
 
+        <Card title="MCP 服务" hint="让本地 AI 客户端通过 Model Context Protocol 搜索、创建、修改和删除记录。">
+          <Toggle
+            label="启用 MCP 服务"
+            checked={settings.mcp_enabled}
+            onChange={(value) => void run(() => backend.setMCP(value, Number(mcpPort) || settings.mcp_port), value ? "MCP 服务已启用" : "MCP 服务已关闭")}
+          />
+          <div className="settings-row">
+            <span>监听端口</span>
+            <div className="inline-form">
+              <input
+                type="number"
+                min={1024}
+                max={65535}
+                value={mcpPort}
+                onChange={(e) => setMcpPort(e.target.value)}
+                aria-label="MCP 端口"
+              />
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={busy}
+                onClick={() => void run(() => backend.setMCP(settings.mcp_enabled, Number(mcpPort)), "MCP 端口已保存")}
+              >
+                保存
+              </button>
+            </div>
+          </div>
+          {settings.mcp_running ? (
+            <div className="result-line">
+              MCP 端点：<code>{settings.mcp_endpoint}</code>
+            </div>
+          ) : (
+            <div className="muted">服务未运行。启用后客户端使用 Streamable HTTP 连接。</div>
+          )}
+          {settings.mcp_error && <div className="inline-error">{settings.mcp_error}</div>}
+          <p className="fine-print">仅监听 127.0.0.1，不对局域网开放；没有额外鉴权，本机进程均可访问。端点路径为 /mcp，提供 search_memos、create_memo、update_memo、delete_memo 工具。</p>
+        </Card>
+
         <Card title="错误日志" hint="界面错误会连同堆栈和上下文写入本地日志；导出时会自动隐藏令牌。">
           <div className="button-row">
             <button type="button" className="secondary-button" disabled={busy} onClick={() => void reload().catch((e) => onError(e instanceof Error ? e.message : String(e)))}>
@@ -436,8 +540,70 @@ export function SettingsPage({
         </Card>
 
         <Card className="settings-card-wide" title="关于" hint="memo v1 · personal desktop app">
+          <div className="update-summary">
+            <div className="update-version">
+              <span>当前版本</span>
+              <strong>v{settings.version}</strong>
+              <em>
+                {update
+                  ? `上次检查：${relativeTime(update.checked_at)}`
+                  : updateBusy
+                    ? "正在检查更新…"
+                    : "尚未检查"}
+              </em>
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={updateBusy}
+              onClick={() => void checkUpdates()}
+            >
+              <RefreshIcon size={15} /> {updateBusy && !updateProgress ? "检查中…" : "检查更新"}
+            </button>
+          </div>
+
+          {updateError && <div className="inline-error">{updateError}</div>}
+
+          {update?.available ? (
+            <div className="update-available">
+              <div className="result-line">
+                发现新版本 <strong>v{update.latest_version}</strong>
+                {update.published_at ? ` · ${relativeTime(update.published_at)}发布` : ""}
+                {update.asset_size > 0 ? ` · ${humanBytes(update.asset_size)}` : ""}
+              </div>
+              {update.notes && <pre className="update-notes">{update.notes}</pre>}
+              <div className="button-row">
+                {update.can_install ? (
+                  <button type="button" className="primary-button" disabled={updateBusy} onClick={() => void installUpdate()}>
+                    <DownloadIcon size={15} /> {updateBusy ? "正在更新…" : `安装 v${update.latest_version} 并重启`}
+                  </button>
+                ) : (
+                  <span className="fine-print">当前平台暂不支持自动安装，请从发布页手动下载。</span>
+                )}
+                <button type="button" className="secondary-button" disabled={updateBusy} onClick={() => void openReleasePage()}>
+                  打开发布页
+                </button>
+              </div>
+            </div>
+          ) : update ? (
+            <div className="result-line">当前已是最新版本。</div>
+          ) : (
+            <div className="muted">检查是否有新版本可用。</div>
+          )}
+
+          {updateProgress && (
+            <div className="update-progress">
+              <div className="progress">
+                <i style={{ width: `${Math.max(0, Math.min(100, updateProgress.percent))}%` }} />
+              </div>
+              <div className="update-progress-line">
+                <span>{updateProgress.message}</span>
+                <em>{Math.round(updateProgress.percent)}%</em>
+              </div>
+            </div>
+          )}
+
           <div className="about-grid">
-            <div><span>版本</span><strong>{settings.version}</strong></div>
             <div><span>存储</span><strong>SQLite (modernc)</strong></div>
             <div><span>搜索</span><strong>FTS5 trigram + LIKE</strong></div>
             <div><span>文件上限</span><strong>{settings.workspace_file_limit ? `${Math.round(settings.workspace_file_limit / 1024 / 1024)} MB` : "未连接"}</strong></div>

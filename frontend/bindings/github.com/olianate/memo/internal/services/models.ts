@@ -222,6 +222,11 @@ export interface SettingsDTO {
     "data_dir": string;
     "onboarded": boolean;
     "hotkey_error"?: string;
+    "mcp_enabled": boolean;
+    "mcp_port": number;
+    "mcp_running": boolean;
+    "mcp_endpoint"?: string;
+    "mcp_error"?: string;
     "version": string;
 }
 
@@ -233,6 +238,23 @@ export interface TagDTO {
     "name": string;
     "normalized": string;
     "count": number;
+}
+
+/**
+ * UpdateInfo describes the newest published release and whether this build can
+ * install it in place.
+ */
+export interface UpdateInfo {
+    "current_version": string;
+    "latest_version": string;
+    "available": boolean;
+    "notes": string;
+    "published_at": string;
+    "release_url": string;
+    "asset_name": string;
+    "asset_size": number;
+    "can_install": boolean;
+    "checked_at": string;
 }
 
 /**
