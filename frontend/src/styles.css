@@ -1532,6 +1532,30 @@ button.tag-chip:hover,
   white-space: pre-wrap;
 }
 
+.md-table-wrap {
+  margin: 5px 0;
+  overflow-x: auto;
+}
+
+.md-table {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: 12.5px;
+}
+
+.md-table th,
+.md-table td {
+  border: 1px solid var(--border);
+  padding: 4px 7px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.md-table th {
+  background: var(--panel-soft);
+  font-weight: 650;
+}
+
 .md-divider {
   border: 0;
   border-top: 1px dashed var(--border-strong);

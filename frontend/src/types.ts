@@ -8,7 +8,8 @@ export type BlockType =
   | "code"
   | "divider"
   | "image"
-  | "file";
+  | "file"
+  | "table";
 
 export interface Span {
   text: string;
@@ -28,6 +29,7 @@ export interface Block {
   spans?: Span[] | null;
   attachment_id?: string;
   alt?: string;
+  rows?: string[][];
 }
 
 export interface Tag {

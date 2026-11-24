@@ -55,6 +55,24 @@ describe("Timeline", () => {
     expect(screen.getByText("打开并恢复")).toBeInTheDocument();
   });
 
+  it("renders Markdown previews instead of raw source", () => {
+    const item = memo({
+      id: "m1",
+      day: "2026-11-21",
+      body: "# 标题\n\n**粗体** 和 <https://example.com>\n\n| a | b |\n| --- | --- |\n| 1 | 2 |",
+    });
+    render(
+      <Timeline memos={[item]} backend={demoBackend} loading={false} onOpen={() => {}} onChanged={() => {}} onError={() => {}} />,
+    );
+    expect(screen.getByText("标题")).toHaveClass("md-heading");
+    expect(screen.getByText("粗体").closest("strong")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "https://example.com" })).toHaveAttribute("href", "https://example.com");
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.queryByText("# 标题")).not.toBeInTheDocument();
+    expect(screen.queryByText(/\| a \| b \|/)).not.toBeInTheDocument();
+  });
+
   it("renders the empty state", () => {
     render(
       <Timeline memos={[]} backend={demoBackend} loading={false} onOpen={() => {}} onChanged={() => {}} onError={() => {}} />,

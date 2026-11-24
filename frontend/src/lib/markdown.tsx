@@ -114,6 +114,22 @@ export function inlineMarkdownToSpans(source: string): Span[] {
           continue;
         }
       }
+      if (rest[0] === "<") {
+        const auto = rest.match(/^<((?:https?:\/\/|mailto:)[^>\s]+)>/i);
+        if (auto) {
+          const url = auto[1].replace(/\\(.)/g, "$1");
+          flush();
+          pushSpan(out, url.replace(/^mailto:/i, ""), { ...style, link: url });
+          i += auto[0].length;
+          continue;
+        }
+        const br = rest.match(/^<br\s*\/?>/i);
+        if (br) {
+          buffer += " ";
+          i += br[0].length;
+          continue;
+        }
+      }
       if (rest[0] === "[" ) {
         const close = rest.indexOf("](");
         if (close > 0) {
@@ -270,9 +286,29 @@ export function blocksFromMarkdown(source: string): Block[] {
   const push = (type: Block["type"], text = "", extra: Partial<Block> = {}) => {
     out.push({ id: `md-${n++}`, type, spans: text ? inlineMarkdownToSpans(text) : [], ...extra });
   };
+  const tableCells = (row: string) =>
+    row
+      .trim()
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split("|")
+      .map((cell) => cell.trim());
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
+    const separatorNext = i + 1 < lines.length && /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(lines[i + 1].trim());
+    const singleRowTable = /^\|.*\|$/.test(line) && (i + 1 >= lines.length || !lines[i + 1].trim());
+    if (line.includes("|") && (separatorNext || singleRowTable)) {
+      const rows = [tableCells(line)];
+      i += separatorNext ? 2 : 1;
+      while (i < lines.length && lines[i].trim() && lines[i].includes("|")) {
+        rows.push(tableCells(lines[i]));
+        i++;
+      }
+      i--;
+      push("table", rows.flat().join(" "), { rows });
+      continue;
+    }
     if (line.startsWith("```")) {
       const language = line.slice(3).trim();
       const code: string[] = [];
@@ -381,6 +417,36 @@ export function BlockPreview({
                 <code>{blockText(block)}</code>
               </pre>
             );
+          case "table": {
+            const [head, ...rows] = block.rows ?? [];
+            if (!head) return null;
+            return (
+              <div key={block.id} className="md-table-wrap">
+                <table className="md-table">
+                  <thead>
+                    <tr>
+                      {head.map((cell, index) => (
+                        <th key={index}>
+                          <InlineSpans spans={inlineMarkdownToSpans(cell)} onOpenLink={onOpenLink} />
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, rowIndex) => (
+                      <tr key={rowIndex}>
+                        {row.map((cell, cellIndex) => (
+                          <td key={cellIndex}>
+                            <InlineSpans spans={inlineMarkdownToSpans(cell)} onOpenLink={onOpenLink} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          }
           default:
             return (
               <p key={block.id} className="md-paragraph">
