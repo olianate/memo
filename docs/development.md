@@ -153,7 +153,18 @@ wails3 task darwin:create:dmg          # bin/memo.dmg
 
 Unsigned builds need right-click → Open the first time. macOS IME behavior is an
 accepted, untested risk (gate 11 was waived for macOS); test on a Mac before any
-release. Auto-update is out of scope for v1: reinstall manually.
+release.
+
+### Updates
+
+Updates are checked from GitHub Releases at startup and every 12 hours, and on
+demand under Settings → 软件更新. The updater downloads the matching installer,
+verifies `SHA256SUMS.txt` when present, runs it silently, and relaunches memo.
+The installers remain unsigned, so Windows SmartScreen or macOS Gatekeeper may
+still ask for confirmation. On Windows the updater reuses the MSI it was
+installed from (detected via the MSI registry marker) and otherwise uses the
+NSIS installer. On macOS the new `.app` is copied over the existing bundle;
+keep a copy of the old build when testing the update path.
 
 #### macOS icon (Icon Composer)
 

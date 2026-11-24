@@ -3,7 +3,7 @@ import type { Backend } from "./backend";
 import { isWailsRuntime, onAppEvent } from "./backend";
 import { wailsBackend } from "./wailsBackend";
 import { demoBackend } from "./demoBackend";
-import type { Counts, Dashboard, Filter, Memo, SearchResult, Settings, SyncStatus, Tag, ViewId } from "./types";
+import type { Counts, Dashboard, Filter, Memo, SearchResult, Settings, SyncStatus, Tag, UpdateInfo, ViewId } from "./types";
 import { currentMonth, startOfDayIso, endOfDayIso, relativeTime } from "./lib/format";
 import { installGlobalErrorHandlers, reportError, setErrorSink } from "./lib/errorLog";
 import { Sidebar } from "./components/Sidebar";
@@ -199,9 +199,15 @@ export default function App({ backend }: { backend?: Backend }) {
       onAppEvent("ui:navigate", (target) => {
         if (target === "settings") setView("settings");
       }),
+      onAppEvent("update:available", (data) => {
+        if (data && typeof data === "object") {
+          const info = data as UpdateInfo;
+          notify(`发现新版本 v${info.latest_version}，可在设置中安装`);
+        }
+      }),
     ];
     return () => offs.forEach((off) => off());
-  }, [fail, scheduleRefresh]);
+  }, [fail, notify, scheduleRefresh]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

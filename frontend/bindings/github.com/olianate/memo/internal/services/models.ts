@@ -236,6 +236,23 @@ export interface TagDTO {
 }
 
 /**
+ * UpdateInfo describes the newest published release and whether this build can
+ * install it in place.
+ */
+export interface UpdateInfo {
+    "current_version": string;
+    "latest_version": string;
+    "available": boolean;
+    "notes": string;
+    "published_at": string;
+    "release_url": string;
+    "asset_name": string;
+    "asset_size": number;
+    "can_install": boolean;
+    "checked_at": string;
+}
+
+/**
  * WorkspaceDTO is the validated Notion workspace summary.
  */
 export interface WorkspaceDTO {

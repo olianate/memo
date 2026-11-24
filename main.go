@@ -80,6 +80,7 @@ func main() {
 	settingsSvc := services.NewSettingsService(st, cfg, dataDir, hooks, keychain)
 	syncBoundary := services.NewSyncService(syncSvc, cfg, st, keychain, emit)
 	platformSvc := services.NewPlatformService(hooks, cfg)
+	updateSvc := services.NewUpdateService(hooks, emit)
 
 	var tray *application.SystemTray
 	syncSvc.OnEvent(func(name string, data any) {
@@ -110,6 +111,7 @@ func main() {
 			application.NewService(settingsSvc),
 			application.NewService(syncBoundary),
 			application.NewService(platformSvc),
+			application.NewService(updateSvc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -219,6 +221,7 @@ func main() {
 	applyTrayStatus(tray, syncSvc.Status(ctx))
 
 	syncSvc.Start(ctx)
+	updateSvc.Start(ctx)
 	err = app.Run()
 	if err != nil {
 		log.Fatal(err)
@@ -277,6 +280,13 @@ func (h *appHooks) ApplyStartAtLogin(enabled bool) error {
 }
 
 func (h *appHooks) OpenPath(path string) error { return platform.RevealPath(path) }
+
+func (h *appHooks) OpenURL(url string) error {
+	if h.app == nil {
+		return nil
+	}
+	return h.app.Browser.OpenURL(url)
+}
 
 func (h *appHooks) ShowMainWindow() {
 	if h.mainWindow == nil {

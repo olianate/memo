@@ -2300,7 +2300,8 @@ mark {
 }
 
 .settings-card-wide .about-grid {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 12px;
 }
 
 .settings-card-head h3 {
@@ -2312,6 +2313,78 @@ mark {
   margin: 2px 0 12px;
   color: var(--faint);
   font-size: 11px;
+}
+
+.update-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 2px 0 4px;
+}
+
+.update-version {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.update-version span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.update-version strong {
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+
+.update-version em {
+  font-style: normal;
+  color: var(--faint);
+  font-size: 10.5px;
+}
+
+.update-available .result-line strong {
+  color: var(--accent-strong);
+}
+
+.update-notes {
+  margin: 8px 0 0;
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.update-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.update-progress-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.update-progress-line em {
+  font-style: normal;
+  color: var(--faint);
 }
 
 .settings-row {

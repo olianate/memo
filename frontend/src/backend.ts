@@ -19,6 +19,7 @@ import type {
   SyncLog,
   SyncStatus,
   Tag,
+  UpdateInfo,
   Workspace,
 } from "./types";
 
@@ -66,6 +67,10 @@ export interface Backend {
   errorLogs(): Promise<SyncLog[]>;
   openDataDir(): Promise<void>;
   completeOnboarding(): Promise<void>;
+
+  checkForUpdates(): Promise<UpdateInfo>;
+  installUpdate(): Promise<void>;
+  openReleasePage(): Promise<void>;
 
   syncStatus(): Promise<SyncStatus>;
   setSyncEnabled(enabled: boolean): Promise<void>;

@@ -17,6 +17,7 @@ import type {
   SyncLog,
   SyncStatus,
   Tag,
+  UpdateInfo,
   Workspace,
 } from "./types";
 import type { Backend } from "./backend";
@@ -661,6 +662,27 @@ export const demoBackend: Backend = {
   },
   async completeOnboarding() {
     demo.settings.onboarded = true;
+  },
+
+  async checkForUpdates(): Promise<UpdateInfo> {
+    return {
+      current_version: demo.settings.version,
+      latest_version: demo.settings.version,
+      available: false,
+      notes: "",
+      published_at: "",
+      release_url: "https://github.com/olianate/memo/releases",
+      asset_name: "",
+      asset_size: 0,
+      can_install: false,
+      checked_at: iso(now()),
+    };
+  },
+  async installUpdate() {
+    throw new Error("演示模式不支持自动安装更新");
+  },
+  async openReleasePage() {
+    return;
   },
 
   async syncStatus() {

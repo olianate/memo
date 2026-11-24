@@ -8,6 +8,7 @@ import * as SettingsService from "./settingsservice.js";
 import * as StatsService from "./statsservice.js";
 import * as SyncService from "./syncservice.js";
 import * as TagService from "./tagservice.js";
+import * as UpdateService from "./updateservice.js";
 export {
     MemoService,
     PlatformService,
@@ -15,7 +16,8 @@ export {
     SettingsService,
     StatsService,
     SyncService,
-    TagService
+    TagService,
+    UpdateService
 };
 
 export type {
@@ -37,5 +39,6 @@ export type {
     SearchResultDTO,
     SettingsDTO,
     TagDTO,
+    UpdateInfo,
     WorkspaceDTO
 } from "./models.js";
