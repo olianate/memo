@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/olianate/memo/internal/archive"
 	"github.com/olianate/memo/internal/attachments"
 	"github.com/olianate/memo/internal/config"
 	"github.com/olianate/memo/internal/domain"
@@ -81,6 +82,14 @@ type testEnv struct {
 	secrets  *testSecrets
 	hooks    *testHooks
 	dir      string
+}
+
+// useGateway swaps the Notion client behind the onboarding adapter.
+func (e *testEnv) useGateway(gw notion.Gateway) {
+	e.sync.link = archive.New(e.cfg, e.secrets, e.store,
+		func(string) notion.Gateway { return gw },
+		e.engine.Wake, e.sync.emitStatus, e.sync.log,
+	)
 }
 
 func newServiceEnv(t *testing.T) *testEnv {
@@ -474,7 +483,7 @@ func TestSyncResolveArchiveTargetAcceptsLinks(t *testing.T) {
 			notion.TitlePropertyName: "title",
 		},
 	})
-	e.sync.client = func(token string) notion.Gateway { return gw }
+	e.useGateway(gw)
 
 	target, err := e.sync.ResolveArchiveTarget("tok", "https://www.notion.so/archive-0123456789abcdef0123456789abcdef?pvs=4")
 	if err != nil {
@@ -533,7 +542,7 @@ func TestSyncConnectWithFakeWorkspace(t *testing.T) {
 		ID: "abcdef0123456789abcdef0123456789", DatabaseID: "11112222333344445555666677778888",
 		Title: "Shared database", PropertyTypes: map[string]string{notion.TitlePropertyName: "title"},
 	})
-	e.sync.client = func(token string) notion.Gateway { return gw }
+	e.useGateway(gw)
 	if _, err := e.memos.Create("local first", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -591,7 +600,7 @@ func TestSyncConnectUsesSharedDatabase(t *testing.T) {
 		Title:         "已有 memo 数据库",
 		PropertyTypes: map[string]string{notion.TitlePropertyName: "title"},
 	})
-	e.sync.client = func(token string) notion.Gateway { return gw }
+	e.useGateway(gw)
 
 	list, err := e.sync.ParentPages("tok", "")
 	if err != nil {
@@ -674,7 +683,7 @@ func TestSyncConnectSharedDatabaseRejectsTypeConflict(t *testing.T) {
 			notion.PropTags:          "rich_text",
 		},
 	})
-	e.sync.client = func(token string) notion.Gateway { return gw }
+	e.useGateway(gw)
 	preview, err := e.sync.PreviewArchiveDatabase("tok", dsID)
 	if err != nil {
 		t.Fatal(err)
@@ -704,7 +713,7 @@ func TestSyncConnectReadySharedDatabaseNeedsNoConfirmation(t *testing.T) {
 		ID: dsID, DatabaseID: "11112222333344445555666677778888",
 		Title: "完整数据库", PropertyTypes: propertyTypes,
 	})
-	e.sync.client = func(token string) notion.Gateway { return gw }
+	e.useGateway(gw)
 	preview, err := e.sync.PreviewArchiveDatabase("tok", dsID)
 	if err != nil {
 		t.Fatal(err)
