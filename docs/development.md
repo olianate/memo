@@ -133,7 +133,7 @@ See `adr/0001-notion-as-optional-archive.md`,
 ## Packaging
 
 The app version shown in Settings lives in `internal/services/version.go`
-(currently `1.2.0`). Keep `build/config.yml`, `build/windows/info.json` and
+(currently `1.3.0`). Keep `build/config.yml`, `build/windows/info.json` and
 `build/darwin/Info*.plist` in sync when bumping it.
 
 ### Windows NSIS installer
@@ -161,7 +161,7 @@ the production binary from `wails3 build`, then:
 ```powershell
 # Download and extract wix314-binaries.zip first:
 #   https://github.com/wixtoolset/wix3/releases/tag/wix3141rtm
-.\build\windows\msi\build.ps1 -Version 1.2.0 -WixDir C:\path\to\wix314
+.\build\windows\msi\build.ps1 -Version 1.3.0 -WixDir C:\path\to\wix314
 # -> bin/memo-windows-amd64.msi
 ```
 
@@ -259,7 +259,7 @@ steps, so it can be called as a reusable workflow.
 NSIS + MSI packages, builds the macOS universal DMG, writes `SHA256SUMS.txt` and
 publishes a GitHub Release with the stable asset names used by the README
 download links. Release notes are read from `docs/releases/<tag>.md` (for
-example `docs/releases/v1.2.0.md`); commit that file before pushing the tag.
+example `docs/releases/v1.3.0.md`); commit that file before pushing the tag.
 If it is absent, the workflow falls back to a generic summary. The workflow can
 also be triggered manually to exercise the build jobs without publishing.
 
