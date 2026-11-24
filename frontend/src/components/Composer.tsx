@@ -60,15 +60,14 @@ export function Composer({
     uploading.current = true;
     setError("");
     try {
+      const payloads = await Promise.all(files.map(fileToBase64));
       let id = draftId;
       if (!id) {
-        const memo = await backend.create(body, tags);
+        const memo = await backend.createWithAttachments(body, tags, payloads);
         id = memo.id;
         setDraftId(id);
-      }
-      for (const file of files) {
-        const payload = await fileToBase64(file);
-        await backend.addAttachmentBase64(id, payload.name, payload.mime, payload.data);
+      } else {
+        await backend.addAttachments(id, payloads);
       }
       const memo = await backend.get(id);
       setBody(memo.body ?? "");

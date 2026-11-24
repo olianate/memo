@@ -143,15 +143,14 @@ export function MemoSheet({
   };
 
   const addFiles = async (files: File[]) => {
-    for (const file of files) {
-      try {
-        const payload = await fileToBase64(file);
-        await backend.addAttachmentBase64(memo.id, payload.name, payload.mime, payload.data);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
+    if (!files.length) return;
+    try {
+      const payloads = await Promise.all(files.map(fileToBase64));
+      await backend.addAttachments(memo.id, payloads);
+      await refresh(memo.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     }
-    await refresh(memo.id);
   };
 
   const removeAttachment = async (id: string) => {

@@ -53,6 +53,12 @@ export interface Attachment {
   notion_file_id?: string;
 }
 
+export interface AttachmentPayload {
+  name: string;
+  mime: string;
+  data: string;
+}
+
 export interface Memo {
   id: string;
   created_at: string;

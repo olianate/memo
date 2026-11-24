@@ -58,6 +58,16 @@ export interface AttachmentDTO {
 }
 
 /**
+ * AttachmentPayload is one file crossing the webview boundary. Data is base64
+ * so a batch of files travels through a single call.
+ */
+export interface AttachmentPayload {
+    "name": string;
+    "mime": string;
+    "data": string;
+}
+
+/**
  * BackupResult describes an exported local backup.
  */
 export interface BackupResult {

@@ -10,6 +10,7 @@ import (
 	"github.com/olianate/memo/internal/domain"
 	"github.com/olianate/memo/internal/domain/markdown"
 	"github.com/olianate/memo/internal/notion"
+	"github.com/olianate/memo/internal/presence"
 )
 
 // PushOnce drains up to 20 due outbox rows. Pushing is single-concurrency to
@@ -131,7 +132,7 @@ func (s *Service) pushOne(ctx context.Context, g notion.Gateway, ds string, memo
 		return nil
 	}
 
-	if memo.LocalState == domain.LocalEvicted {
+	if presence.Evicted(*memo) {
 		return errors.New("memo body is evicted; hydrate before editing")
 	}
 	if err := s.ensureTagOptions(ctx, g, ds, memo.Tags); err != nil {

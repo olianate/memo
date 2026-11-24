@@ -109,15 +109,14 @@ export default function StickyApp({ backend }: { backend?: Backend }) {
     if (!files.length) return;
     uploading.current = true;
     try {
+      const payloads = await Promise.all(files.map(fileToBase64));
       let id = draftId;
       if (!id) {
-        const memo = await b.create(body, tags);
+        const memo = await b.createWithAttachments(body, tags, payloads);
         id = memo.id;
         setDraftId(id);
-      }
-      for (const file of files) {
-        const payload = await fileToBase64(file);
-        await b.addAttachmentBase64(id, payload.name, payload.mime, payload.data);
+      } else {
+        await b.addAttachments(id, payloads);
       }
       const memo = await b.get(id);
       setBody(memo.body ?? "");

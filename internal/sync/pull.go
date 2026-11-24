@@ -194,7 +194,6 @@ func (s *Service) applyPage(ctx context.Context, g notion.Gateway, p notion.Page
 	rev := notion.RevisionFromPage(p)
 	updated := notion.UpdatedAtFromPage(p)
 	created := notion.CreatedAtFromPage(p)
-	wasEvicted := err == nil && local.LocalState == domain.LocalEvicted
 
 	if errors.Is(err, domain.ErrNotFound) {
 		if deleted {
@@ -204,14 +203,15 @@ func (s *Service) applyPage(ctx context.Context, g notion.Gateway, p notion.Page
 		if err != nil {
 			return err
 		}
-		if _, err := s.store.ApplyRemote(ctx, store.RemoteMemo{
+		_, applied, err := s.presence.MergeRemote(ctx, store.RemoteMemo{
 			ID: id, PageID: p.ID, CreatedAt: created, UpdatedAt: updated, Revision: rev,
 			Body: markdown.Serialize(blocks), Tags: notion.TagsFromPage(p), SyncedAt: s.clock(),
-		}); err != nil {
+		})
+		if err != nil {
 			return err
 		}
 		// The memo row must exist before attachment metadata can reference it.
-		if !wasEvicted {
+		if applied {
 			wired, err := s.importAttachments(ctx, g, id, blocks, atts)
 			if err != nil {
 				return err
@@ -263,13 +263,14 @@ func (s *Service) applyPage(ctx context.Context, g notion.Gateway, p notion.Page
 	if err != nil {
 		return err
 	}
-	if _, err := s.store.ApplyRemote(ctx, store.RemoteMemo{
+	_, applied, err := s.presence.MergeRemote(ctx, store.RemoteMemo{
 		ID: id, PageID: p.ID, CreatedAt: created, UpdatedAt: updated, Revision: rev,
 		Body: markdown.Serialize(blocks), Tags: notion.TagsFromPage(p), SyncedAt: s.clock(),
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
-	if !wasEvicted {
+	if applied {
 		wired, err := s.importAttachments(ctx, g, id, blocks, atts)
 		if err != nil {
 			return err

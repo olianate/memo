@@ -67,6 +67,9 @@ export const wailsBackend: Backend = {
   async create(body, tags) {
     return asMemo(await MemoSvc.Create(body, tags));
   },
+  async createWithAttachments(body, tags, files) {
+    return asMemo(await MemoSvc.CreateWithAttachments(body, tags, files as any));
+  },
   async update(id, body, tags, keepLocal) {
     return asMemo(await MemoSvc.Update(id, body, tags, keepLocal));
   },
@@ -90,6 +93,9 @@ export const wailsBackend: Backend = {
   },
   async addAttachmentBase64(memoId, name, mime, data): Promise<Attachment> {
     return (await MemoSvc.AddAttachmentBase64(memoId, name, mime, data)) as unknown as Attachment;
+  },
+  async addAttachments(memoId, files): Promise<Attachment[]> {
+    return ((await MemoSvc.AddAttachments(memoId, files as any)) ?? []) as unknown as Attachment[];
   },
   async removeAttachment(id) {
     await MemoSvc.RemoveAttachment(id);

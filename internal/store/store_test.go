@@ -261,6 +261,10 @@ func TestTagRenameReindexesAndQueuesPropertyPush(t *testing.T) {
 	if err := s.ClearOutbox(ctx, memo.ID); err != nil {
 		t.Fatal(err)
 	}
+	old := time.Unix(1_700_000_000, 0).UTC()
+	if _, err := s.DB().Exec(`UPDATE memos SET updated_at=? WHERE id=?`, toMS(old), memo.ID); err != nil {
+		t.Fatal(err)
+	}
 	tags, _ := s.ListTags(ctx)
 	if _, err := s.RenameTag(ctx, tags[0].ID, "career"); err != nil {
 		t.Fatal(err)
@@ -268,6 +272,9 @@ func TestTagRenameReindexesAndQueuesPropertyPush(t *testing.T) {
 	got, _ := s.GetMemo(ctx, memo.ID)
 	if got.Revision != 1 || got.BodyText != "body stays" {
 		t.Fatalf("rename touched the body/revision: %+v", got)
+	}
+	if !got.UpdatedAt.After(old) {
+		t.Fatalf("rename did not advance updated_at: %v", got.UpdatedAt)
 	}
 	if len(got.Tags) != 1 || got.Tags[0].Name != "career" {
 		t.Fatalf("tags = %+v", got.Tags)
@@ -416,7 +423,7 @@ func TestApplyRemoteDoesNotEnqueue(t *testing.T) {
 		Tags:      []string{"remote"},
 		SyncedAt:  now,
 	}
-	memo, err := s.ApplyRemote(ctx, remote)
+	memo, err := s.ApplyRemote(ctx, remote, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -437,7 +444,7 @@ func TestEvictionKeepsMetadataAndSearchText(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
 	memo, _ := s.CreateMemo(ctx, MemoInput{Body: "search still works"})
-	if err := s.SetEvicted(ctx, memo.ID); err != nil {
+	if err := s.EvictBody(ctx, memo.ID, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := s.GetMemo(ctx, memo.ID)

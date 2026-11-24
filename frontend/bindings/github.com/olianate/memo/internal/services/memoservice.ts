@@ -23,6 +23,14 @@ export function AddAttachmentBase64(memoID: string, name: string, mime: string, 
 }
 
 /**
+ * AddAttachments ingests several files as one revision and one sync outbox
+ * entry, and returns the attachments it added.
+ */
+export function AddAttachments(memoID: string, files: $models.AttachmentPayload[] | null): $CancellablePromise<$models.AttachmentDTO[] | null> {
+    return $Call.ByID(1712028319, memoID, files);
+}
+
+/**
  * AttachmentData returns a data URL for the full image.
  */
 export function AttachmentData(id: string): $CancellablePromise<string> {
@@ -48,6 +56,14 @@ export function Counts(): $CancellablePromise<$models.CountsDTO> {
  */
 export function Create(body: string, tags: string[] | null): $CancellablePromise<$models.MemoDTO> {
     return $Call.ByID(3023508364, body, tags);
+}
+
+/**
+ * CreateWithAttachments stores a new memo and its files as one revision, so a
+ * capture with images never passes through an empty draft memo.
+ */
+export function CreateWithAttachments(body: string, tags: string[] | null, files: $models.AttachmentPayload[] | null): $CancellablePromise<$models.MemoDTO> {
+    return $Call.ByID(2825417766, body, tags, files);
 }
 
 /**

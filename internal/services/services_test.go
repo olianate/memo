@@ -18,8 +18,10 @@ import (
 	"github.com/olianate/memo/internal/attachments"
 	"github.com/olianate/memo/internal/config"
 	"github.com/olianate/memo/internal/domain"
+	"github.com/olianate/memo/internal/memoedit"
 	"github.com/olianate/memo/internal/notion"
 	"github.com/olianate/memo/internal/notion/fake"
+	"github.com/olianate/memo/internal/presence"
 	"github.com/olianate/memo/internal/search"
 	"github.com/olianate/memo/internal/stats"
 	"github.com/olianate/memo/internal/store"
@@ -97,9 +99,12 @@ func newServiceEnv(t *testing.T) *testEnv {
 	engine.SetDeviceID("dev-test")
 	hooks := &testHooks{}
 	emit := func(string, any) {}
+	keeper := presence.New(st, att, engine.Hydrate, nil, emit)
+	engine.SetPresence(keeper)
+	editor := memoedit.New(st, att, keeper, func(string) {})
 	return &testEnv{
 		store: st, cfg: cfg, dir: dir, secrets: kc, hooks: hooks, engine: engine,
-		memos:    NewMemoService(st, engine, att, emit),
+		memos:    NewMemoService(st, att, emit, editor, keeper),
 		tags:     NewTagService(st, emit),
 		search:   NewSearchService(search.New(st)),
 		stats:    NewStatsService(stats.New(st)),
@@ -256,6 +261,38 @@ func TestAttachmentAddAppendsBlockAndRemove(t *testing.T) {
 	after, _ := e.memos.Get(memo.ID)
 	if len(after.Attachments) != 0 || strings.Contains(after.Body, "attachment://") || !strings.HasPrefix(after.Body, "with image") {
 		t.Fatalf("after remove = %+v", after)
+	}
+}
+
+func TestBatchAttachmentsAreOneRevision(t *testing.T) {
+	e := newServiceEnv(t)
+	encoded := base64.StdEncoding.EncodeToString(testPNG(t))
+	created, err := e.memos.CreateWithAttachments("two files", nil, []AttachmentPayload{
+		{Name: "one.png", MIME: "image/png", Data: encoded},
+		{Name: "two.txt", MIME: "text/plain", Data: base64.StdEncoding.EncodeToString([]byte("hello"))},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Revision != 1 || len(created.Attachments) != 2 {
+		t.Fatalf("created = %+v", created)
+	}
+	added, err := e.memos.AddAttachments(created.ID, []AttachmentPayload{
+		{Name: "three.txt", MIME: "text/plain", Data: base64.StdEncoding.EncodeToString([]byte("world"))},
+		{Name: "four.txt", MIME: "text/plain", Data: base64.StdEncoding.EncodeToString([]byte("again"))},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(added) != 2 {
+		t.Fatalf("added = %+v", added)
+	}
+	got, _ := e.memos.Get(created.ID)
+	if got.Revision != 2 || len(got.Attachments) != 4 {
+		t.Fatalf("after add = %+v", got)
+	}
+	if _, err := e.memos.AddAttachments(created.ID, []AttachmentPayload{{Name: "bad", Data: "not base64"}}); err == nil {
+		t.Fatal("bad payload was accepted")
 	}
 }
 

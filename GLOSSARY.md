@@ -16,6 +16,10 @@ _Avoid_: Media, upload
 The Markdown text the user typed, stored verbatim and canonical; it is the only body source of truth. Derived text, statistics, and Notion blocks are projections of it.
 _Avoid_: Body JSON, block AST, rich text, Markdown source
 
+**Memo edit**:
+One change-set (body, tags, pin, attachment additions and removals) applied as a single revision and one sync outbox entry; the only path from user intent to the next Memo body.
+_Avoid_: Save, update call, patch
+
 **Live preview editor**:
 The single Markdown editing surface where the line holding the caret is raw source and committed lines render; there is no separate source mode.
 _Avoid_: Block editor, WYSIWYG, Notion editor
@@ -35,6 +39,10 @@ _Avoid_: Cleanup, cache expiry, deletion
 **Evicted memo**:
 A memo whose body and attachments are no longer on local disk but whose metadata, tags, and search index remain.
 _Avoid_: Deleted memo, archived memo
+
+**Body presence**:
+Whether a memo's body and attachment bytes are on this device. The presence module is the only owner of that fact: it restores on demand, evicts under local retention, and keeps an evicted body absent when a remote page is merged.
+_Avoid_: Cache state, hydration flag
 
 **Notion archive**:
 The Notion data source that stores synced memos; it is an archive, not a real-time database or a privacy eraser.

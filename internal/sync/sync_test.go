@@ -14,6 +14,7 @@ import (
 	"github.com/olianate/memo/internal/domain"
 	"github.com/olianate/memo/internal/notion"
 	"github.com/olianate/memo/internal/notion/fake"
+	"github.com/olianate/memo/internal/presence"
 	"github.com/olianate/memo/internal/store"
 )
 
@@ -107,6 +108,7 @@ func newEnv(t *testing.T, device string, shared *fake.Gateway) *env {
 	svc.SetGateway(fw)
 	svc.SetDeviceID(device)
 	svc.SetClock(func() time.Time { return now })
+	svc.SetPresence(presence.New(st, imp, svc.Hydrate, func() time.Time { return now }, nil))
 	return &env{store: st, cfg: cfg, fake: fw, svc: svc, imp: imp, device: device, now: &now}
 }
 
@@ -692,7 +694,7 @@ func TestPullDoesNotWriteBodyIntoEvictedMemo(t *testing.T) {
 	memo, _ := e.store.CreateMemo(ctx, store.MemoInput{Body: "local body"})
 	_ = e.store.MarkSynced(ctx, memo.ID, "page-ev", 1, time.Now().Add(-time.Hour))
 	_ = e.store.ClearOutbox(ctx, memo.ID)
-	_ = e.store.SetEvicted(ctx, memo.ID)
+	_ = e.store.EvictBody(ctx, memo.ID, *e.now)
 	now := time.Now().UTC()
 	url := "https://signed.example/evicted.png"
 	e.fake.Downloads[url] = []byte("bytes")
@@ -869,9 +871,8 @@ func TestHydrationRestoresEvictedAttachmentBytes(t *testing.T) {
 		t.Fatalf("push did not wire attachment: %+v", synced.Attachments)
 	}
 	_ = e.store.MarkSynced(ctx, memo.ID, synced.NotionPageID, synced.Revision, (*e.now).Add(-31*24*time.Hour))
-	_ = e.store.MarkAttachmentEvicted(ctx, att.ID, *e.now)
 	_ = os.Remove(path)
-	_ = e.store.SetEvicted(ctx, memo.ID)
+	_ = e.store.EvictBody(ctx, memo.ID, *e.now)
 
 	if err := e.svc.Hydrate(ctx, memo.ID); err != nil {
 		t.Fatal(err)
@@ -900,7 +901,7 @@ func TestRestoreAllReportsProgress(t *testing.T) {
 	}
 	got, _ := e.store.GetMemo(ctx, memo.ID)
 	_ = e.store.MarkSynced(ctx, memo.ID, got.NotionPageID, got.Revision, e.now.Add(-31*24*time.Hour))
-	_ = e.store.SetEvicted(ctx, memo.ID)
+	_ = e.store.EvictBody(ctx, memo.ID, *e.now)
 	progress, err := e.svc.RestoreAll(ctx)
 	if err != nil {
 		t.Fatal(err)

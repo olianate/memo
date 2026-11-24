@@ -247,7 +247,9 @@ func refreshTagMemos(ctx context.Context, tx *sql.Tx, tagID string) error {
 }
 
 // refreshMemoMetadata re-indexes a memo after a tag-only change and queues a
-// property push. The revision is intentionally unchanged.
+// property push. The revision is intentionally unchanged because the body did
+// not change, so push rewrites properties only; updated_at still advances so
+// other devices pick the rename up through the Updated cursor (ADR-0003).
 func refreshMemoMetadata(ctx context.Context, tx *sql.Tx, memoID string) error {
 	var revision int64
 	var bodyText string
@@ -266,10 +268,14 @@ func refreshMemoMetadata(ctx context.Context, tx *sql.Tx, memoID string) error {
 	if err != nil {
 		return err
 	}
+	now := time.Now().UTC()
+	if _, err := tx.ExecContext(ctx, `UPDATE memos SET updated_at=?, sync_error='' WHERE id=?`, toMS(now), memoID); err != nil {
+		return err
+	}
 	if err := indexMemo(ctx, tx, memoID, bodyText, tags); err != nil {
 		return err
 	}
-	return enqueueTx(ctx, tx, memoID, domain.OutboxUpsert, revision, time.Now().UTC())
+	return enqueueTx(ctx, tx, memoID, domain.OutboxUpsert, revision, now)
 }
 
 // RebuildIndex re-creates every FTS row from local metadata and present bodies.

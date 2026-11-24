@@ -3,6 +3,7 @@ import type {
   ArchiveDatabasePreview,
   ArchiveTarget,
   Attachment,
+  AttachmentPayload,
   BackupResult,
   ConnectRequest,
   ConnectResult,
@@ -29,6 +30,7 @@ export interface Backend {
   get(id: string): Promise<Memo>;
   counts(): Promise<Counts>;
   create(body: string, tags: string[]): Promise<Memo>;
+  createWithAttachments(body: string, tags: string[], files: AttachmentPayload[]): Promise<Memo>;
   update(id: string, body: string, tags: string[], keepLocal: boolean): Promise<Memo>;
   remove(id: string): Promise<void>;
   restore(id: string): Promise<Memo>;
@@ -37,6 +39,7 @@ export interface Backend {
   setKeepLocal(id: string, keep: boolean): Promise<void>;
   hydrate(id: string): Promise<Memo>;
   addAttachmentBase64(memoId: string, name: string, mime: string, data: string): Promise<Attachment>;
+  addAttachments(memoId: string, files: AttachmentPayload[]): Promise<Attachment[]>;
   removeAttachment(id: string): Promise<void>;
   attachmentThumb(id: string): Promise<string>;
   attachmentData(id: string): Promise<string>;

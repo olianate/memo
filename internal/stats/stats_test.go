@@ -70,7 +70,7 @@ func TestDashboardAggregates(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Evicted body must still contribute words and composition.
-	if err := st.SetEvicted(ctx, second.ID); err != nil {
+	if err := st.EvictBody(ctx, second.ID, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 

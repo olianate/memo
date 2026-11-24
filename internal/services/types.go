@@ -4,7 +4,6 @@ package services
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/olianate/memo/internal/domain"
@@ -30,6 +29,14 @@ type MemoDTO struct {
 	Tags           []TagDTO        `json:"tags"`
 	Attachments    []AttachmentDTO `json:"attachments"`
 	Day            string          `json:"day"`
+}
+
+// AttachmentPayload is one file crossing the webview boundary. Data is base64
+// so a batch of files travels through a single call.
+type AttachmentPayload struct {
+	Name string `json:"name"`
+	MIME string `json:"mime"`
+	Data string `json:"data"`
 }
 
 // TagDTO is one tag with its active-memo count.
@@ -145,17 +152,6 @@ func toMemoFilter(f FilterDTO) store.MemoFilter {
 	}
 	if t, err := time.Parse(time.RFC3339, f.To); err == nil {
 		out.To = &t
-	}
-	return out
-}
-
-func cleanTags(tags []string) []string {
-	out := make([]string, 0, len(tags))
-	for _, t := range tags {
-		t = domain.CleanTagName(t)
-		if t != "" && !strings.Contains(t, " ") {
-			out = append(out, t)
-		}
 	}
 	return out
 }

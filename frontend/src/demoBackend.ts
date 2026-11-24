@@ -2,6 +2,7 @@ import type {
   ArchiveDatabasePreview,
   ArchiveTarget,
   Attachment,
+  AttachmentPayload,
   BackupResult,
   ConnectRequest,
   ConnectResult,
@@ -256,6 +257,32 @@ function appendAttachment(body: string, line: string): string {
   return trimmed ? `${trimmed}\n\n${line}` : line;
 }
 
+function attachPayloads(memo: Memo, files: AttachmentPayload[]): Attachment[] {
+  const added: Attachment[] = [];
+  for (const file of files) {
+    const kind: Attachment["kind"] = file.mime.startsWith("image/") ? "image" : "file";
+    const attachment: Attachment = {
+      id: `att-${Math.random().toString(36).slice(2, 10)}`,
+      memo_id: memo.id,
+      kind,
+      name: file.name,
+      mime: file.mime,
+      bytes: Math.round((file.data.length * 3) / 4),
+      present: true,
+      has_thumb: kind === "image",
+    };
+    demo.attachments.set(attachment.id, { data: `data:${file.mime};base64,${file.data}`, mime: file.mime });
+    memo.attachments = [...(memo.attachments ?? []), attachment];
+    memo.body = appendAttachment(memo.body, attachmentLine(kind, attachment.id, file.name));
+    added.push(attachment);
+  }
+  if (added.length) {
+    memo.snippet = snippetOf(memo.body);
+    memo.updated_at = iso(now());
+  }
+  return added;
+}
+
 function removeAttachmentLine(body: string, id: string): string {
   return markdownLines(body)
     .filter((line) => {
@@ -399,6 +426,12 @@ export const demoBackend: Backend = {
     demo.recount();
     return { ...memo };
   },
+  async createWithAttachments(body, tags, files) {
+    const memo = demo.add(body, tags);
+    attachPayloads(memo, files);
+    demo.recount();
+    return { ...memo, attachments: [...(memo.attachments ?? [])] };
+  },
   async update(id, body, tags, keepLocal) {
     const memo = demo.memos.find((m) => m.id === id);
     if (!memo) throw new Error("memo not found");
@@ -446,25 +479,16 @@ export const demoBackend: Backend = {
     return { ...memo };
   },
   async addAttachmentBase64(memoId, name, mime, data) {
+    const added = await demoBackend.addAttachments(memoId, [{ name, mime, data }]);
+    if (!added.length) throw new Error("attachment was not stored");
+    return added[0];
+  },
+  async addAttachments(memoId, files) {
     const memo = demo.memos.find((m) => m.id === memoId);
     if (!memo) throw new Error("memo not found");
-    const kind: Attachment["kind"] = mime.startsWith("image/") ? "image" : "file";
-    const attachment: Attachment = {
-      id: `att-${Math.random().toString(36).slice(2, 10)}`,
-      memo_id: memoId,
-      kind,
-      name,
-      mime,
-      bytes: Math.round((data.length * 3) / 4),
-      present: true,
-      has_thumb: kind === "image",
-    };
-    demo.attachments.set(attachment.id, { data: `data:${mime};base64,${data}`, mime });
-    memo.attachments = [...(memo.attachments ?? []), attachment];
-    memo.body = appendAttachment(memo.body, attachmentLine(kind, attachment.id, name));
-    memo.snippet = snippetOf(memo.body);
-    memo.revision += 1;
-    return attachment;
+    const added = attachPayloads(memo, files);
+    if (added.length) memo.revision += 1;
+    return added;
   },
   async removeAttachment(id) {
     for (const memo of demo.memos) {

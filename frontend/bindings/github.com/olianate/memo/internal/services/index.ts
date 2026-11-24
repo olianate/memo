@@ -25,6 +25,7 @@ export type {
     ArchiveDatabasePreview,
     ArchiveTargetDTO,
     AttachmentDTO,
+    AttachmentPayload,
     BackupResult,
     ConnectRequest,
     ConnectResult,

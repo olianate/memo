@@ -12,8 +12,13 @@ import (
 	"github.com/olianate/memo/internal/config"
 	"github.com/olianate/memo/internal/domain"
 	"github.com/olianate/memo/internal/notion"
+	"github.com/olianate/memo/internal/presence"
 	"github.com/olianate/memo/internal/store"
 )
+
+// SetPresence wires the body-presence module. Retention calls it to evict, so
+// the eviction order lives in one module.
+func (s *Service) SetPresence(p *presence.Keeper) { s.presence = p }
 
 // Secrets is the keychain port. The token is never persisted in SQLite.
 type Secrets interface {
@@ -51,6 +56,7 @@ type Service struct {
 	cfg      *config.Store
 	secrets  Secrets
 	importer AttachmentImporter
+	presence *presence.Keeper
 
 	clock          func() time.Time
 	rand           *rand.Rand
