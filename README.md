@@ -59,19 +59,19 @@ Windows 需要 WebView2，macOS 需要 12+。
 Windows MSI 需要 WiX 3.14，NSIS 安装包需要 NSIS，macOS 需要 Xcode Command Line Tools。
 
 ```bash
-go test ./internal/...
+go test ./internal/... ./tools/...
 ( cd frontend && npm ci && npm test && npx tsc --noEmit )
 
 wails3 dev     # 热重载
 wails3 build   # 生产构建，嵌入 frontend/dist
 ```
 
-安装包与发布流程（MSI / NSIS / DMG、`SHA256SUMS.txt`、推送 `v*` tag 触发的 workflow）见  
-[`docs/development.md`](docs/development.md)。
+安装包与发布流程（版本号工具、tag 规则、MSI / NSIS / DMG、`SHA256SUMS.txt`）见 [`docs/releasing.md`](docs/releasing.md)；打包细节见 [`docs/development.md`](docs/development.md)。
 
 ## 文档
 
 - [`docs/development.md`](docs/development.md)：实现、Notion 行为和打包细节
+- [`docs/releasing.md`](docs/releasing.md)：维护者发版流程与失败回滚
 - [`GLOSSARY.md`](GLOSSARY.md)：领域术语
 - [`docs/adr/`](docs/adr/)：架构决策记录
 - [`SMOKE.md`](SMOKE.md)：发布前人工检查清单
