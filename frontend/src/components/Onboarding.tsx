@@ -264,14 +264,22 @@ export function Onboarding({
   return (
     <div className="onboarding">
       <div className="onboarding-card">
-        <div className="onboarding-brand">
-          <div className="brand-mark">m</div>
-          <div>
-            <strong>memo</strong>
-            <span>个人笔记 · 可选 Notion 归档</span>
+        <aside className="onboarding-aside">
+          <div className="onboarding-brand">
+            <div className="brand-mark">m</div>
+            <div>
+              <strong>memo</strong>
+              <span>个人笔记 · 可选 Notion 归档</span>
+            </div>
           </div>
-        </div>
+          <div className="onboarding-aside-note">
+            <span>本地优先</span>
+            <p>所有内容先写入本机 SQLite。Notion 只在你需要时参与归档与同步。</p>
+          </div>
+          <div className="onboarding-aside-foot">SQLite · 本地存储</div>
+        </aside>
 
+        <div className="onboarding-main">
         {step === "welcome" && (
           <>
             <h1>先写在本地，再决定要不要归档。</h1>
@@ -611,6 +619,7 @@ export function Onboarding({
             </div>
           </>
         )}
+        </div>
       </div>
     </div>
   );

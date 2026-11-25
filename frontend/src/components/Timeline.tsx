@@ -96,6 +96,7 @@ export function Timeline({
           <div className="day-header">
             <h3>置顶</h3>
             <span>保持在最前</span>
+            <i className="day-line" aria-hidden="true" />
             <em>{pinned.length} 条</em>
           </div>
           {pinned.map((memo) => (
@@ -122,6 +123,7 @@ export function Timeline({
             <div className="day-header">
               <h3>{label.title}</h3>
               <span>{label.sub}</span>
+              <i className="day-line" aria-hidden="true" />
               <em>{group.memos.length} 条</em>
             </div>
             {group.memos.map((memo) => (
@@ -181,109 +183,115 @@ function MemoCard({
         if (e.key === "Enter" && e.target === e.currentTarget) onOpen();
       }}
     >
-      <div className="memo-meta">
+      <div className="entry-time">
         <time dateTime={memo.created_at}>{formatTime(memo.created_at)}</time>
-        {updated && <span className="edited">已编辑 {formatTime(memo.updated_at)}</span>}
-        <StatusBadge memo={memo} />
-        <div className="memo-actions" onClick={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            className={`icon-button ${memo.pinned ? "is-on" : ""}`}
-            title={memo.pinned ? "取消置顶" : "置顶"}
-            aria-label={memo.pinned ? "取消置顶" : "置顶"}
-            onClick={onPin}
-          >
-            <PinIcon size={15} />
-          </button>
-          <button
-            type="button"
-            className={`icon-button ${memo.keep_local ? "is-on" : ""}`}
-            title={memo.keep_local ? "取消保留本地" : "保留本地"}
-            aria-label={memo.keep_local ? "取消保留本地" : "保留本地"}
-            onClick={onKeepLocal}
-          >
-            <LockIcon size={15} />
-          </button>
-          <button
-            type="button"
-            className="icon-button danger"
-            title={memo.deleted ? "永久删除" : "删除"}
-            aria-label={memo.deleted ? "永久删除笔记" : "删除笔记"}
-            onClick={onRemove}
-          >
-            <TrashIcon size={15} />
-          </button>
-        </div>
+        {memo.pinned && <PinIcon size={11} />}
       </div>
 
-      {(memo.tags ?? []).length > 0 && (
-        <div className="memo-tags" onClick={(e) => e.stopPropagation()}>
-          {(memo.tags ?? []).map((tag) => (
-            <TagChip key={tag.id} name={tag.name} onClick={onTag ? () => onTag(tag.name) : undefined} />
-          ))}
-        </div>
-      )}
-
-      {memo.local_state === "evicted" ? (
-        <div className="evicted-banner">
-          <span>正文与附件已清理，打开这条笔记时从 Notion 恢复。</span>
-          <button type="button" className="link-btn" onClick={() => onOpen()}>
-            打开并恢复
-          </button>
-        </div>
-      ) : (
-        <div className={`memo-body ${open ? "is-open" : ""}`}>
-          <BlockPreview
-            blocks={preview.blocks}
-            limit={open ? 500 : 4}
-            onOpenLink={(url) => {
-              backend.openURL(url).catch((err) => onError(String(err)));
-            }}
-          />
-        </div>
-      )}
-
-      {preview.images.length > 0 && (
-        <TimelineImages
-          backend={backend}
-          attachments={preview.images}
-          collapsed={!open && preview.images.length > 2}
-          onError={onError}
-        />
-      )}
-      {preview.files.length > 0 && (
-        <div className="timeline-files">
-          {preview.files.slice(0, open ? 20 : 2).map((file) => (
+      <div className="entry-main">
+        <div className="memo-meta">
+          {updated && <span className="edited">已编辑 {formatTime(memo.updated_at)}</span>}
+          <StatusBadge memo={memo} />
+          <div className="memo-actions" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
-              className="file-chip"
-              key={file.id}
-              onClick={(e) => {
-                e.stopPropagation();
-                backend.openAttachment(file.id).catch((err) => onError(String(err)));
-              }}
+              className={`icon-button ${memo.pinned ? "is-on" : ""}`}
+              title={memo.pinned ? "取消置顶" : "置顶"}
+              aria-label={memo.pinned ? "取消置顶" : "置顶"}
+              onClick={onPin}
             >
-              <FileIcon size={14} />
-              <span>{file.name}</span>
-              <em>{humanBytes(file.bytes)}</em>
+              <PinIcon size={15} />
             </button>
-          ))}
+            <button
+              type="button"
+              className={`icon-button ${memo.keep_local ? "is-on" : ""}`}
+              title={memo.keep_local ? "取消保留本地" : "保留本地"}
+              aria-label={memo.keep_local ? "取消保留本地" : "保留本地"}
+              onClick={onKeepLocal}
+            >
+              <LockIcon size={15} />
+            </button>
+            <button
+              type="button"
+              className="icon-button danger"
+              title={memo.deleted ? "永久删除" : "删除"}
+              aria-label={memo.deleted ? "永久删除笔记" : "删除笔记"}
+              onClick={onRemove}
+            >
+              <TrashIcon size={15} />
+            </button>
+          </div>
         </div>
-      )}
 
-      {(preview.long || (memo.attachments ?? []).length > 0) && (
-        <button
-          type="button"
-          className="expand-button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle();
-          }}
-        >
-          {open ? "收起" : "展开"}
-          <ChevronIcon size={14} className={open ? "rotate-180" : ""} />
-        </button>
-      )}
+        {(memo.tags ?? []).length > 0 && (
+          <div className="memo-tags" onClick={(e) => e.stopPropagation()}>
+            {(memo.tags ?? []).map((tag) => (
+              <TagChip key={tag.id} name={tag.name} onClick={onTag ? () => onTag(tag.name) : undefined} />
+            ))}
+          </div>
+        )}
+
+        {memo.local_state === "evicted" ? (
+          <div className="evicted-banner">
+            <span>正文与附件已清理，打开这条笔记时从 Notion 恢复。</span>
+            <button type="button" className="link-btn" onClick={() => onOpen()}>
+              打开并恢复
+            </button>
+          </div>
+        ) : (
+          <div className={`memo-body ${open ? "is-open" : ""}`}>
+            <BlockPreview
+              blocks={preview.blocks}
+              limit={open ? 500 : 4}
+              onOpenLink={(url) => {
+                backend.openURL(url).catch((err) => onError(String(err)));
+              }}
+            />
+          </div>
+        )}
+
+        {preview.images.length > 0 && (
+          <TimelineImages
+            backend={backend}
+            attachments={preview.images}
+            collapsed={!open && preview.images.length > 2}
+            onError={onError}
+          />
+        )}
+        {preview.files.length > 0 && (
+          <div className="timeline-files">
+            {preview.files.slice(0, open ? 20 : 2).map((file) => (
+              <button
+                type="button"
+                className="file-chip"
+                key={file.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  backend.openAttachment(file.id).catch((err) => onError(String(err)));
+                }}
+              >
+                <FileIcon size={14} />
+                <span>{file.name}</span>
+                <em>{humanBytes(file.bytes)}</em>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {(preview.long || (memo.attachments ?? []).length > 0) && (
+          <button
+            type="button"
+            className="expand-button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+          >
+            {open ? "收起" : "展开"}
+            <ChevronIcon size={14} className={open ? "rotate-180" : ""} />
+          </button>
+        )}
+      </div>
     </article>
   );
 }

@@ -16,13 +16,13 @@ const compositionLabels: Record<string, string> = {
 };
 
 const compositionColors: Record<string, string> = {
-  paragraph: "#22c55e",
-  heading: "#0ea5e9",
-  list: "#84cc16",
-  todo: "#f59e0b",
-  quote: "#14b8a6",
-  code: "#6366f1",
-  attachment: "#ec4899",
+  paragraph: "#8a3a2e",
+  heading: "#3d6650",
+  list: "#8c6420",
+  todo: "#b07a2a",
+  quote: "#6f6655",
+  code: "#948b7b",
+  attachment: "#9c352b",
 };
 
 export function StatsPage({
@@ -77,7 +77,7 @@ export function StatsPage({
     .map((c) => {
       const start = angle;
       angle += (c.count / totalComposition) * 360;
-      return `${compositionColors[c.type] ?? "#94a3b8"} ${start}deg ${angle}deg`;
+      return `${compositionColors[c.type] ?? "#9a9080"} ${start}deg ${angle}deg`;
     })
     .join(", ");
   const maxDaily = Math.max(1, ...data.daily.map((d) => d.count));
@@ -91,8 +91,13 @@ export function StatsPage({
   return (
     <div className="stats-page">
       <div className="stats-head">
-        <div>
-          <h2>记录统计</h2>
+        <div className="review-lead">
+          <div className="review-kicker">
+            <span>记录统计</span> · {formatMonth(month)}
+          </div>
+          <h2 className="review-title">
+            这个月，你写下了 <em>{data.totals.notes}</em> 条，其中 <em>{data.totals.active_days}</em> 天没有缺席。
+          </h2>
           <p>统计来自本地 SQLite，不上传。即使正文被清理，元数据仍然计入。</p>
         </div>
         <div className="stats-controls">

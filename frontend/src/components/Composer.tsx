@@ -2,7 +2,6 @@ import { useRef, useState } from "react";
 import type { Attachment } from "../types";
 import type { MemoDraftBackend } from "../backend";
 import { MarkdownEditor } from "./MarkdownEditor";
-import { SendIcon } from "./Icons";
 import { fileToBase64 } from "../lib/files";
 
 export function Composer({
@@ -35,6 +34,8 @@ export function Composer({
   const hasContent = () => body.trim().length > 0 || attachments.length > 0;
   const saveKey = submitOnEnter ? "Enter" : "Shift+Enter";
   const newlineKey = submitOnEnter ? "Shift+Enter" : "Enter";
+  const now = new Date();
+  const todayLabel = `${now.getMonth() + 1}月${now.getDate()}日 · 周${"日一二三四五六"[now.getDay()]}`;
 
   const save = async () => {
     if (saving || uploading.current) return;
@@ -98,6 +99,13 @@ export function Composer({
 
   return (
     <div className="composer">
+      <div className="composer-head">
+        <span className="composer-eyebrow">
+          <span className="ink-dot" aria-hidden="true" />
+          现在
+        </span>
+        <span className="composer-date">{todayLabel}</span>
+      </div>
       <MarkdownEditor
         backend={backend}
         body={body}
@@ -117,7 +125,16 @@ export function Composer({
         </span>
         {error && <span className="inline-error">{error}</span>}
         <button type="button" className="send-button" onClick={() => void save()} disabled={saving} aria-label="保存笔记">
-          {saving ? <span className="spinner" /> : <SendIcon size={17} />}
+          {saving ? (
+            <span className="spinner" />
+          ) : (
+            <>
+              <span>保存</span>
+              <span className="send-arrow" aria-hidden="true">
+                ↑
+              </span>
+            </>
+          )}
         </button>
       </div>
     </div>

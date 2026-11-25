@@ -14,6 +14,7 @@ export function MemoSheet({
   onChanged,
   onError,
   submitOnEnter = true,
+  inline = false,
 }: {
   memo: Memo;
   backend: MemoSheetBackend;
@@ -21,6 +22,7 @@ export function MemoSheet({
   onChanged: (memo: Memo | null) => void;
   onError: (message: string) => void;
   submitOnEnter?: boolean;
+  inline?: boolean;
 }) {
   const [body, setBody] = useState(memo.body ?? "");
   const [tags, setTags] = useState<string[]>((memo.tags ?? []).map((t) => t.name));
@@ -178,12 +180,21 @@ export function MemoSheet({
     }
   };
 
-  return (
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-modal="true" aria-label="编辑笔记" onClick={(e) => e.stopPropagation()}>
+  const created = new Date(memo.created_at);
+  const weekday = ["日", "一", "二", "三", "四", "五", "六"][created.getDay()];
+  const readerTitle = `${created.getMonth() + 1}月${created.getDate()}日 星期${weekday}`;
+
+  const panel = (
+    <div
+      className={`sheet ${inline ? "is-inline" : ""}`}
+      role={inline ? undefined : "dialog"}
+      aria-modal={inline ? undefined : true}
+      aria-label="编辑笔记"
+      onClick={(e) => e.stopPropagation()}
+    >
         <header className="sheet-header">
           <div>
-            <h2>{deleted ? "回收站中的笔记" : "编辑笔记"}</h2>
+            <h2>{deleted ? "回收站中的笔记" : inline ? readerTitle : "编辑笔记"}</h2>
             <p>
               {formatDate(memo.created_at)}
               {memo.updated_at !== memo.created_at && ` · 编辑于 ${formatDate(memo.updated_at)}`}
@@ -292,6 +303,22 @@ export function MemoSheet({
           </>
         )}
       </div>
+  );
+
+  if (inline) {
+    return (
+      <div className="reader-page">
+        <button type="button" className="reader-back" onClick={onClose}>
+          <span aria-hidden="true">←</span> 返回时间线
+        </button>
+        {panel}
+      </div>
+    );
+  }
+
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      {panel}
     </div>
   );
 }
