@@ -25,6 +25,7 @@ internal/
   services/                   typed Wails boundary (the only frontend API)
 frontend/                     React UI (main window + sticky capture)
 tools/seed/                   dev profile seed for screenshots/smoke tests
+tools/release/                version bump + consistency check
 third_party/wails/            pinned Wails v3.1.0 + PR #6596 (IME fix)
 ```
 
@@ -40,7 +41,7 @@ pinned locally, so no network fetch of a forked Wails is needed.
 
 ```powershell
 # backend tests (temporary SQLite databases + fake Notion gateway)
-go test ./internal/...
+go test ./internal/... ./tools/...
 
 # frontend unit/component tests and the embedded production assets
 cd frontend
@@ -132,9 +133,21 @@ See `adr/0001-notion-as-optional-archive.md`,
 
 ## Packaging
 
-The app version shown in Settings lives in `internal/services/version.go`
-(currently `1.3.0`). Keep `build/config.yml`, `build/windows/info.json` and
-`build/darwin/Info*.plist` in sync when bumping it.
+The app version is written to 15 locations in 8 files: `build/config.yml`,
+`build/windows/info.json`, `build/darwin/Info*.plist`, `build/ios/Info.plist`,
+`internal/services/version.go`, `frontend/package.json` and
+`frontend/package-lock.json`. Do not edit them by hand; use the release tool:
+
+```powershell
+go run ./tools/release print              # version currently in build/config.yml
+go run ./tools/release check              # every location agrees with config
+go run ./tools/release set 1.4.0          # bump every location
+go run ./tools/release check 1.4.0 -notes # also require docs/releases/v1.4.0.md
+```
+
+`set` is idempotent and only rewrites the version values, so comments and file
+formatting survive. The full release procedure is in
+[releasing.md](releasing.md).
 
 ### Windows NSIS installer
 
@@ -250,18 +263,21 @@ timeline.
 ### GitHub Actions
 
 `.github/workflows/ci.yml` runs on every push to `main` and on every pull
-request: `gofmt`, `go build ./...`, `go vet ./...`, `go test ./internal/...`,
-`npx tsc --noEmit` and `npm test`. It is also the single definition of the test
-steps, so it can be called as a reusable workflow.
+request: `gofmt`, `go test ./internal/... ./tools/...`, `go vet ./...`,
+`go run ./tools/release check`, `npx tsc --noEmit` and `npm test`, then builds
+the frontend and compile-checks the Windows app. It is also the single
+definition of the test steps, so release jobs call it as a reusable workflow.
 
-`.github/workflows/release.yml` runs on `v*` tags and reuses `ci.yml` for its
-`verify` job, then checks the tag against `build/config.yml`, builds the Windows
-NSIS + MSI packages, builds the macOS universal DMG, writes `SHA256SUMS.txt` and
-publishes a GitHub Release with the stable asset names used by the README
-download links. Release notes are read from `docs/releases/<tag>.md` (for
-example `docs/releases/v1.3.0.md`); commit that file before pushing the tag.
-If it is absent, the workflow falls back to a generic summary. The workflow can
-also be triggered manually to exercise the build jobs without publishing.
+`.github/workflows/release.yml` runs on `v[0-9]*` tags. Its `preflight` job
+derives the version from the tag, requires the tag commit to be on `main`,
+checks all 15 version locations and requires `docs/releases/v<version>.md`.
+It then reuses `ci.yml` for `Tests`, builds the Windows NSIS + MSI packages and
+the macOS universal DMG with the tag version, writes `SHA256SUMS.txt` and
+publishes the GitHub Release with the stable asset names used by the README and
+the updater. There is no release-notes fallback: a missing notes file fails the
+run. Manual dispatch builds the installers without publishing, which is useful
+for testing runner changes. See [releasing.md](releasing.md) for the maintainer
+procedure.
 
 ## Verification
 

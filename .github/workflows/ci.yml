@@ -44,7 +44,13 @@ jobs:
           fi
 
       - name: Go tests
-        run: go test ./internal/...
+        run: go test ./internal/... ./tools/...
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Check version files
+        run: go run ./tools/release check
 
       - name: Install frontend dependencies
         working-directory: frontend
