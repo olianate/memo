@@ -2887,6 +2887,43 @@ mark {
   padding: 9px 11px;
 }
 
+.field-input {
+  position: relative;
+  display: flex;
+}
+
+.field-input input {
+  width: 100%;
+  padding-right: 38px;
+}
+
+.field-suffix {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--faint);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.field-suffix:hover {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.field-suffix:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  color: var(--text);
+}
+
 .workspace-preview {
   display: flex;
   align-items: center;
