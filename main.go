@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -34,18 +36,22 @@ var assets embed.FS
 var appIcon []byte
 
 func main() {
+	dataDir, logPath, closeLog := setupRuntime()
+	defer closeLog()
+	// A packaged build has no console. A panic must leave a log file and a
+	// visible dialog instead of a process that silently disappears.
+	defer recoverPanic(logPath)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dataDir, err := platform.EnsureDataDir()
-	if err != nil {
-		log.Fatalf("memo: data directory: %v", err)
-	}
 	st, err := store.Open(filepath.Join(dataDir, "memo.db"))
 	if err != nil {
-		log.Fatalf("memo: open database: %v", err)
+		fatal(logPath, fmt.Errorf("open database: %w", err))
+		return
 	}
 	defer st.Close()
+	log.Printf("memo: database ready")
 
 	cfg := config.New(st)
 	deviceID := cfg.Get(ctx, config.KeyDeviceID)
@@ -54,7 +60,8 @@ func main() {
 		_ = cfg.Set(ctx, config.KeyDeviceID, deviceID)
 	}
 	if _, err := st.EnsureDevice(ctx, deviceID); err != nil {
-		log.Fatalf("memo: device state: %v", err)
+		fatal(logPath, fmt.Errorf("device state: %w", err))
+		return
 	}
 
 	keychain := platform.Keychain{}
@@ -101,6 +108,11 @@ func main() {
 		Name:        "memo",
 		Description: "Local-first memos with a Notion archive",
 		Icon:        appIcon,
+		// Wails reports WebView2 and window failures here and then exits for
+		// fatal ones. Without this hook the process vanishes with no window.
+		ErrorHandler: func(err error) {
+			reportRuntimeError(logPath, err)
+		},
 		SingleInstance: &application.SingleInstanceOptions{
 			// Must match build/config.yml productIdentifier (and CFBundleIdentifier).
 			UniqueID: "com.memo.app",
@@ -172,6 +184,7 @@ func main() {
 		mainWindow.Hide()
 		e.Cancel()
 	})
+	log.Printf("memo: windows created")
 
 	hooks.app = app
 	hooks.mainWindow = mainWindow
@@ -240,10 +253,105 @@ func main() {
 	syncSvc.Start(ctx)
 	updateSvc.Start(ctx)
 	go purgeTrashOnSchedule(ctx, memoSvc)
-	err = app.Run()
-	if err != nil {
-		log.Fatal(err)
+	log.Printf("memo: starting UI")
+	if err = app.Run(); err != nil {
+		fatal(logPath, err)
 	}
+}
+
+// setupRuntime resolves the data directory and starts file logging. A packaged
+// build has no console, so every startup path either writes a log or shows a
+// native dialog; nothing may fail silently.
+func setupRuntime() (dataDir, logPath string, closeLog func()) {
+	dataDir, err := platform.EnsureDataDir()
+	if err != nil {
+		fatalFromTemp(fmt.Errorf("data directory: %w", err))
+	}
+
+	path, closeFn, logErr := platform.SetupLogging(dataDir)
+	if logErr != nil {
+		log.Printf("memo: file logging disabled: %v", logErr)
+		return dataDir, "", func() {}
+	}
+	log.Printf("memo: starting version %s", services.Version)
+	log.Printf("memo: data directory %s", dataDir)
+	return dataDir, path, closeFn
+}
+
+// fatalFromTemp records a failure whose data directory is unusable under the
+// system temp directory, then reports it like any other fatal error.
+func fatalFromTemp(err error) {
+	if tmp, tmpErr := os.MkdirTemp("", "memo-startup-"); tmpErr == nil {
+		if path, _, logErr := platform.SetupLogging(tmp); logErr == nil {
+			fatal(path, err)
+		}
+	}
+	fatal("", err)
+}
+
+// fatal logs a startup failure and shows it in a native dialog before exiting.
+// This is the difference between "double-click does nothing" and a message the
+// user can act on.
+func fatal(logPath string, err error) {
+	log.Printf("memo: fatal: %v", err)
+	platform.ShowError("memo 无法启动", fatalMessage(logPath, err))
+	os.Exit(1)
+}
+
+// fatalMessage adds an actionable Chinese hint for failures users can fix
+// themselves, and otherwise falls back to the raw error plus the log path.
+func fatalMessage(logPath string, err error) string {
+	message := errorDetails(logPath, err)
+	if errors.Is(err, store.ErrLegacyProfile) {
+		message = "这个数据目录由 1.2 或更早的版本创建，当前版本不会读取其中的旧笔记，也不会删除它们。\n\n" +
+			"请先完整备份该目录，然后把它改名或移走，再重新启动 memo。\n\n" + message
+	}
+	return message
+}
+
+// recoverPanic turns an unexpected panic into a log entry plus a dialog.
+func recoverPanic(logPath string) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	log.Printf("memo: panic: %v\n%s", r, debug.Stack())
+	platform.ShowError("memo 崩溃", errorDetails(logPath, fmt.Errorf("%v", r)))
+	os.Exit(1)
+}
+
+var (
+	runtimeErrorMu   sync.Mutex
+	runtimeErrorSeen = map[string]bool{}
+)
+
+// reportRuntimeError logs errors raised inside Wails (WebView2 setup, window
+// creation, ...). Dialogs are deduplicated and capped so a failing subsystem
+// cannot stack endless modal boxes on the main thread.
+func reportRuntimeError(logPath string, err error) {
+	log.Printf("memo: runtime error: %v", err)
+	runtimeErrorMu.Lock()
+	defer runtimeErrorMu.Unlock()
+	key := err.Error()
+	if runtimeErrorSeen[key] || len(runtimeErrorSeen) >= 5 {
+		return
+	}
+	runtimeErrorSeen[key] = true
+	platform.ShowError("memo 遇到错误", errorDetails(logPath, err))
+}
+
+// errorDetails formats an error for a dialog: bounded in size, and pointing at
+// the log file when one was opened.
+func errorDetails(logPath string, err error) string {
+	const maxRunes = 1500
+	detail := err.Error()
+	if runes := []rune(detail); len(runes) > maxRunes {
+		detail = string(runes[:maxRunes]) + "…"
+	}
+	if logPath == "" {
+		return detail
+	}
+	return detail + "\n\n日志：" + logPath
 }
 
 // purgeTrashOnSchedule enforces the 30-day trash retention at startup and then

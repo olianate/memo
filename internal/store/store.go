@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,11 @@ import (
 )
 
 const schemaVersion = 4
+
+// ErrLegacyProfile reports a data directory written before Markdown became the
+// canonical body (1.2 and earlier). There is no in-place migration: the bodies
+// stay untouched and the user has to back up and reset the profile.
+var ErrLegacyProfile = errors.New("store: this profile stores memos as block JSON from an older version")
 
 // Store wraps the SQLite database. All methods are safe for concurrent use.
 type Store struct {
@@ -95,9 +101,8 @@ func (s *Store) migrate() error {
 					return fmt.Errorf("store: inspect legacy body: %w", err)
 				}
 				if stale > 0 {
-					return fmt.Errorf("store: this profile stores memos as block JSON from an older version; " +
-						"this release cannot read it and will not silently discard the bodies. " +
-						"Reset local data or restore a backup made by this version")
+					return fmt.Errorf("%w; this release cannot read it and will not silently discard the bodies. "+
+						"Reset local data or restore a backup made by this version", ErrLegacyProfile)
 				}
 			}
 			if _, err := s.db.Exec(`ALTER TABLE memos ADD COLUMN body_md TEXT NOT NULL DEFAULT ''`); err != nil {

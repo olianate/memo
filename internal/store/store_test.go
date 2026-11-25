@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -472,6 +473,9 @@ func TestLegacyBlockProfileIsRejected(t *testing.T) {
 	_, err = Open(path)
 	if err == nil || !strings.Contains(err.Error(), "block JSON") {
 		t.Fatalf("legacy profile error = %v, want a clear block-JSON rejection", err)
+	}
+	if !errors.Is(err, ErrLegacyProfile) {
+		t.Fatalf("legacy profile error = %v, want ErrLegacyProfile", err)
 	}
 }
 

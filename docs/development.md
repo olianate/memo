@@ -288,6 +288,8 @@ procedure.
   composer, search snippets, the timeline and the statistics zero state.
 - `../SMOKE.md` is the manual checklist for launch, capture, IME, search, Notion
   connection, retention and restart.
+- `platform.SetupLogging` tests cover file creation, rotation and a broken stderr
+  handle; every fatal startup path logs and shows a native dialog.
 
 ## Known limits (v1)
 
@@ -299,5 +301,5 @@ procedure.
   HTML, math, footnotes, embeds and nested-list nesting stay literal locally and
   are flattened or preserved as a `notion` fence when pushed.
 - A profile created by the block-AST version is rejected at startup with a
-  message to reset local data; there is no in-place migration.
+  native dialog pointing at `logs/memo.log`; there is no in-place migration.
 - macOS IME is untested by decision.
