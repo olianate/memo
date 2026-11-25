@@ -4,7 +4,7 @@ import type { MemoSheetBackend } from "../backend";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { formatDate } from "../lib/format";
 import { fileToBase64 } from "../lib/files";
-import { CloseIcon, PinIcon, TrashIcon } from "./Icons";
+import { CloseIcon, LockIcon, PinIcon, TrashIcon } from "./Icons";
 import { StatusBadge } from "./common";
 
 export function MemoSheet({
@@ -26,6 +26,7 @@ export function MemoSheet({
   const [tags, setTags] = useState<string[]>((memo.tags ?? []).map((t) => t.name));
   const [attachments, setAttachments] = useState<Attachment[]>(memo.attachments ?? []);
   const [keepLocal, setKeepLocal] = useState(memo.keep_local);
+  const [pinned, setPinned] = useState(memo.pinned);
   const [deleted, setDeleted] = useState(memo.deleted);
   const [saving, setSaving] = useState(false);
   const [purging, setPurging] = useState(false);
@@ -40,6 +41,7 @@ export function MemoSheet({
     setTags((memo.tags ?? []).map((t) => t.name));
     setAttachments(memo.attachments ?? []);
     setKeepLocal(memo.keep_local);
+    setPinned(memo.pinned);
     setDeleted(memo.deleted);
     setEvicted(memo.local_state === "evicted");
   }, [memo.id, memo.revision, memo.local_state]);
@@ -57,6 +59,8 @@ export function MemoSheet({
     setBody(fresh.body ?? "");
     setTags((fresh.tags ?? []).map((t) => t.name));
     setAttachments(fresh.attachments ?? []);
+    setKeepLocal(fresh.keep_local);
+    setPinned(fresh.pinned);
     setDeleted(fresh.deleted);
     setEvicted(fresh.local_state === "evicted");
     onChanged(fresh);
@@ -130,11 +134,23 @@ export function MemoSheet({
     }
   };
 
-  const pin = async () => {
+  const toggleKeepLocal = async () => {
     const next = !keepLocal;
     setKeepLocal(next);
     try {
       await backend.setKeepLocal(memo.id, next);
+      const fresh = await backend.get(memo.id);
+      onChanged(fresh);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const togglePinned = async () => {
+    const next = !pinned;
+    setPinned(next);
+    try {
+      await backend.setPinned(memo.id, next);
       const fresh = await backend.get(memo.id);
       onChanged(fresh);
     } catch (e) {
@@ -176,8 +192,23 @@ export function MemoSheet({
           </div>
           <div className="sheet-actions">
             <StatusBadge memo={{ ...memo, deleted }} />
-            <button type="button" className={`icon-button ${keepLocal ? "is-on" : ""}`} onClick={() => void pin()} title="保留本地" aria-label="保留本地">
+            <button
+              type="button"
+              className={`icon-button ${pinned ? "is-on" : ""}`}
+              onClick={() => void togglePinned()}
+              title={pinned ? "取消置顶" : "置顶"}
+              aria-label={pinned ? "取消置顶" : "置顶"}
+            >
               <PinIcon size={17} />
+            </button>
+            <button
+              type="button"
+              className={`icon-button ${keepLocal ? "is-on" : ""}`}
+              onClick={() => void toggleKeepLocal()}
+              title={keepLocal ? "取消保留本地" : "保留本地"}
+              aria-label={keepLocal ? "取消保留本地" : "保留本地"}
+            >
+              <LockIcon size={17} />
             </button>
             <button
               type="button"
@@ -223,10 +254,16 @@ export function MemoSheet({
             </div>
             {error && <div className="inline-error sheet-error">{error}</div>}
             <footer className="sheet-footer">
-              <label className="checkbox-row">
-                <input type="checkbox" checked={keepLocal} onChange={() => void pin()} />
-                <span>保留本地（不参与清理）</span>
-              </label>
+              <div className="sheet-toggles">
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={pinned} onChange={() => void togglePinned()} />
+                  <span>置顶（显示在最前）</span>
+                </label>
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={keepLocal} onChange={() => void toggleKeepLocal()} />
+                  <span>保留本地（不参与清理）</span>
+                </label>
+              </div>
               <div className="sheet-footer-actions">
                 {deleted ? (
                   <>

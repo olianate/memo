@@ -8,6 +8,7 @@ export function memo(overrides: Partial<Memo> & { id: string; day: string }): Me
     snippet: "",
     deleted: false,
     keep_local: false,
+    pinned: false,
     local_state: "present",
     body: "示例正文",
     tags: [],

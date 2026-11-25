@@ -243,9 +243,37 @@ func main() {
 
 	syncSvc.Start(ctx)
 	updateSvc.Start(ctx)
+	go purgeTrashOnSchedule(ctx, memoSvc)
 	err = app.Run()
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+// purgeTrashOnSchedule enforces the 30-day trash retention at startup and then
+// every six hours. It is deliberately independent of Notion sync: the sync tick
+// skips all work when the archive is disabled or unconfigured.
+func purgeTrashOnSchedule(ctx context.Context, memos *services.MemoService) {
+	purge := func() {
+		n, err := memos.PurgeExpiredTrash()
+		if err != nil {
+			log.Printf("memo: trash cleanup: %v", err)
+			return
+		}
+		if n > 0 {
+			log.Printf("memo: trash cleanup removed %d expired memos", n)
+		}
+	}
+	purge()
+	ticker := time.NewTicker(6 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			purge()
+		}
 	}
 }
 

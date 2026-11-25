@@ -153,6 +153,7 @@ export interface MemoDTO {
     "deleted": boolean;
     "deleted_at"?: string;
     "keep_local": boolean;
+    "pinned": boolean;
     "local_state": string;
     "notion_page_id"?: string;
     "notion_synced_at"?: string;

@@ -230,6 +230,40 @@ func TestPurgeMemoAndEmptyTrash(t *testing.T) {
 	}
 }
 
+func TestPurgeExpiredTrash(t *testing.T) {
+	e := newServiceEnv(t)
+	ctx := context.Background()
+	expired, _ := e.memos.Create("expired", nil)
+	recent, _ := e.memos.Create("recent", nil)
+	live, _ := e.memos.Create("live", nil)
+	for _, memo := range []MemoDTO{expired, recent} {
+		if err := e.memos.Delete(memo.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.store.DB().ExecContext(ctx,
+		`UPDATE memos SET deleted_at=? WHERE id=?`,
+		time.Now().Add(-31*24*time.Hour).UnixMilli(), expired.ID); err != nil {
+		t.Fatal(err)
+	}
+	purged, err := e.memos.purgeExpiredTrash(ctx, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if purged != 1 {
+		t.Fatalf("purged = %d", purged)
+	}
+	if _, err := e.store.GetMemo(ctx, expired.ID); err == nil {
+		t.Fatal("expired trash memo still exists")
+	}
+	if _, err := e.store.GetMemo(ctx, recent.ID); err != nil {
+		t.Fatalf("recent trash memo was removed: %v", err)
+	}
+	if _, err := e.store.GetMemo(ctx, live.ID); err != nil {
+		t.Fatalf("live memo was removed: %v", err)
+	}
+}
+
 func testPNG(t *testing.T) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 40, 30))

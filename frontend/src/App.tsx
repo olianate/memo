@@ -156,7 +156,7 @@ export default function App({ backend }: { backend?: Backend }) {
                   queryText
                     ? `关键词「${queryText}」`
                     : view === "trash"
-                      ? "软删除的笔记仍保留在本地，恢复后会重新进入同步队列。"
+                      ? "删除的笔记会保留 30 天，到期后自动永久删除；期间可以恢复。"
                       : "先写下来，再慢慢整理。"
                 }
                 onRefresh={controller.refresh}
@@ -249,7 +249,7 @@ export default function App({ backend }: { backend?: Backend }) {
                     emptyTitle={view === "trash" ? "回收站是空的" : undefined}
                     emptyHint={
                       view === "trash"
-                        ? "删除的笔记会出现在这里，可以恢复或永久删除。"
+                        ? "删除的笔记会在这里保留 30 天，可以恢复；到期后自动永久删除。"
                         : undefined
                     }
                   />

@@ -129,6 +129,7 @@ class DemoStore {
       snippet: snippetOf(body),
       deleted: false,
       keep_local: false,
+      pinned: false,
       local_state: "present",
       notion_page_id: `page-${Math.random().toString(36).slice(2, 12)}`,
       notion_synced_at: iso(at),
@@ -170,7 +171,9 @@ class DemoStore {
     if (filter.synced) list = list.filter((m) => Boolean(m.notion_page_id));
     if (filter.with_attachment) list = list.filter((m) => (m.attachments ?? []).length > 0);
     if (filter.untagged) list = list.filter((m) => (m.tags ?? []).length === 0);
-    return list.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    return list.sort(
+      (a, b) => Number(b.pinned) - Number(a.pinned) || b.created_at.localeCompare(a.created_at),
+    );
   }
 }
 
@@ -269,6 +272,10 @@ export const demoBackend: Backend = {
   async setKeepLocal(id, keep) {
     const memo = demo.memos.find((m) => m.id === id);
     if (memo) memo.keep_local = keep;
+  },
+  async setPinned(id, pinned) {
+    const memo = demo.memos.find((m) => m.id === id);
+    if (memo) memo.pinned = pinned;
   },
   async hydrate(id) {
     const memo = demo.memos.find((m) => m.id === id);

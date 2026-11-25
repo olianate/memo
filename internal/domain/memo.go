@@ -146,6 +146,7 @@ type Memo struct {
 	Snippet        string       `json:"snippet"`
 	DeletedAt      *time.Time   `json:"deleted_at,omitempty"`
 	KeepLocal      bool         `json:"keep_local"`
+	Pinned         bool         `json:"pinned"`
 	LocalState     LocalState   `json:"local_state"`
 	NotionPageID   string       `json:"notion_page_id,omitempty"`
 	NotionSyncedAt *time.Time   `json:"notion_synced_at,omitempty"`

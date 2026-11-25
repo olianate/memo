@@ -14,7 +14,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 3
+const schemaVersion = 4
 
 // Store wraps the SQLite database. All methods are safe for concurrent use.
 type Store struct {
@@ -105,6 +105,17 @@ func (s *Store) migrate() error {
 			}
 		}
 	}
+	if version < 4 {
+		hasPinned, err := s.hasColumn("memos", "pinned")
+		if err != nil {
+			return err
+		}
+		if !hasPinned {
+			if _, err := s.db.Exec(`ALTER TABLE memos ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`); err != nil {
+				return fmt.Errorf("store: migrate v4: %w", err)
+			}
+		}
+	}
 	if _, err := s.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion)); err != nil {
 		return fmt.Errorf("store: set schema version: %w", err)
 	}
@@ -143,6 +154,7 @@ CREATE TABLE IF NOT EXISTS memos (
   snippet TEXT NOT NULL DEFAULT '',
   deleted_at INTEGER,
   keep_local INTEGER NOT NULL DEFAULT 0,
+  pinned INTEGER NOT NULL DEFAULT 0,
   local_state TEXT NOT NULL DEFAULT 'present',
   notion_page_id TEXT NOT NULL DEFAULT '',
   notion_synced_at INTEGER,
@@ -237,7 +249,7 @@ CREATE TABLE IF NOT EXISTS purged_pages (
 `
 
 const memoColumns = `id, created_at, updated_at, revision, body_md, body_text, snippet,
-  deleted_at, keep_local, local_state, notion_page_id, notion_synced_at,
+  deleted_at, keep_local, pinned, local_state, notion_page_id, notion_synced_at,
   last_hydrated_at, base_revision, content_hash, sync_error, block_stats`
 
 func toMS(t time.Time) int64 { return t.UTC().UnixMilli() }

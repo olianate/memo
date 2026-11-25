@@ -1415,6 +1415,15 @@ button.tag-chip:hover,
   border-color: var(--accent);
 }
 
+.pinned-group .day-header h3 {
+  color: var(--accent);
+}
+
+.memo-card.is-pinned {
+  border-color: var(--accent-soft);
+  background: linear-gradient(180deg, var(--accent-soft), var(--panel) 42%);
+}
+
 .memo-meta {
   display: flex;
   align-items: center;
@@ -1934,6 +1943,13 @@ mark {
 .sheet-footer-actions {
   display: flex;
   gap: 7px;
+}
+
+.sheet-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
 }
 
 .sheet-error {

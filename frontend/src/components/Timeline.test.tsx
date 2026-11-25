@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Timeline } from "../components/Timeline";
 import { demoBackend } from "../demoBackend";
@@ -71,6 +71,40 @@ describe("Timeline", () => {
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.queryByText("# 标题")).not.toBeInTheDocument();
     expect(screen.queryByText(/\| a \| b \|/)).not.toBeInTheDocument();
+  });
+
+  it("shows pinned memos in a section above the timeline", () => {
+    const memos = [
+      memo({ id: "p1", day: "2026-11-20", body: "置顶内容", pinned: true }),
+      memo({ id: "m1", day: "2026-11-22", body: "普通内容" }),
+    ];
+    render(
+      <Timeline
+        memos={memos}
+        backend={demoBackend}
+        loading={false}
+        onOpen={() => {}}
+        onChanged={() => {}}
+        onError={() => {}}
+      />,
+    );
+    const section = screen.getByText("置顶").closest("section");
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText("置顶内容")).toBeInTheDocument();
+    expect(within(section!).queryByText("普通内容")).not.toBeInTheDocument();
+    const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(headings[0]).toBe("置顶");
+  });
+
+  it("toggles pinning from the card action", async () => {
+    const setPinned = vi.fn().mockResolvedValue(undefined);
+    const backend = { ...demoBackend, setPinned };
+    const item = memo({ id: "m1", day: "2026-11-21" });
+    render(
+      <Timeline memos={[item]} backend={backend} loading={false} onOpen={() => {}} onChanged={() => {}} onError={() => {}} />,
+    );
+    await userEvent.click(screen.getByTitle("置顶"));
+    expect(setPinned).toHaveBeenCalledWith("m1", true);
   });
 
   it("renders the empty state", () => {

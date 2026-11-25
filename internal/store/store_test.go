@@ -211,6 +211,57 @@ func TestSoftDeleteRestoreAndViews(t *testing.T) {
 	}
 }
 
+func TestPinnedMemosSortFirstAndPersist(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	older, err := s.CreateMemo(ctx, MemoInput{Body: "older", CreatedAt: time.Now().Add(-time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer, err := s.CreateMemo(ctx, MemoInput{Body: "newer", CreatedAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.ListMemos(ctx, MemoFilter{})
+	if err != nil || len(list) != 2 {
+		t.Fatalf("list = %+v, %v", list, err)
+	}
+	if list[0].ID != newer.ID {
+		t.Fatalf("newest should be first before pinning: %+v", list)
+	}
+	revision := older.Revision
+	if err := s.SetPinned(ctx, older.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	list, err = s.ListMemos(ctx, MemoFilter{})
+	if err != nil || len(list) != 2 {
+		t.Fatalf("list after pin = %+v, %v", list, err)
+	}
+	if list[0].ID != older.ID || !list[0].Pinned {
+		t.Fatalf("pinned memo should lead the timeline: %+v", list)
+	}
+	stored, err := s.GetMemo(ctx, older.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stored.Pinned {
+		t.Fatal("pinned flag was not persisted")
+	}
+	if stored.Revision != revision {
+		t.Fatalf("pinning bumped revision from %d to %d", revision, stored.Revision)
+	}
+	if err := s.SetPinned(ctx, older.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	list, err = s.ListMemos(ctx, MemoFilter{})
+	if err != nil || len(list) != 2 || list[0].ID != newer.ID {
+		t.Fatalf("list after unpin = %+v, %v", list, err)
+	}
+	if err := s.SetPinned(ctx, "missing", true); err != domain.ErrNotFound {
+		t.Fatalf("missing pin error = %v", err)
+	}
+}
+
 func TestPurgedPageMarkers(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)

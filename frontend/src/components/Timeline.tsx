@@ -6,7 +6,7 @@ import { memoPreview } from "../lib/preview";
 import { groupByDay } from "../lib/group";
 import { dayLabel, formatTime, humanBytes } from "../lib/format";
 import { EmptyState, StatusBadge, TagChip } from "./common";
-import { ChevronIcon, CloseIcon, FileIcon, PinIcon, TrashIcon } from "./Icons";
+import { ChevronIcon, CloseIcon, FileIcon, LockIcon, PinIcon, TrashIcon } from "./Icons";
 
 export function Timeline({
   memos,
@@ -54,7 +54,16 @@ export function Timeline({
     }
   };
 
-  const pin = async (memo: Memo) => {
+  const togglePin = async (memo: Memo) => {
+    try {
+      await backend.setPinned(memo.id, !memo.pinned);
+      onChanged();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const toggleKeepLocal = async (memo: Memo) => {
     try {
       await backend.setKeepLocal(memo.id, !memo.keep_local);
       onChanged();
@@ -76,9 +85,36 @@ export function Timeline({
     return <EmptyState title={emptyTitle} hint={emptyHint} />;
   }
 
-  const groups = groupByDay(memos);
+  const pinned = memos.filter((memo) => memo.pinned && !memo.deleted);
+  const rest = memos.filter((memo) => !(memo.pinned && !memo.deleted));
+  const groups = groupByDay(rest);
+
   return (
     <div className="timeline">
+      {pinned.length > 0 && (
+        <section className="day-group pinned-group" key="pinned">
+          <div className="day-header">
+            <h3>置顶</h3>
+            <span>保持在最前</span>
+            <em>{pinned.length} 条</em>
+          </div>
+          {pinned.map((memo) => (
+            <MemoCard
+              key={memo.id}
+              memo={memo}
+              backend={backend}
+              open={expanded.has(memo.id)}
+              onToggle={() => toggle(memo.id)}
+              onOpen={() => onOpen(memo)}
+              onTag={onTag}
+              onError={onError}
+              onRemove={() => void remove(memo)}
+              onPin={() => void togglePin(memo)}
+              onKeepLocal={() => void toggleKeepLocal(memo)}
+            />
+          ))}
+        </section>
+      )}
       {groups.map((group) => {
         const label = dayLabel(group.day);
         return (
@@ -88,121 +124,167 @@ export function Timeline({
               <span>{label.sub}</span>
               <em>{group.memos.length} 条</em>
             </div>
-            {group.memos.map((memo) => {
-              const open = expanded.has(memo.id);
-              const preview = memoPreview(memo);
-              const updated = memo.updated_at !== memo.created_at;
-              return (
-                <article
-                  key={memo.id}
-                  className={`memo-card ${open ? "is-open" : ""} ${memo.deleted ? "is-deleted" : ""}`}
-                  onClick={() => onOpen(memo)}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && e.target === e.currentTarget) onOpen(memo);
-                  }}
-                >
-                  <div className="memo-meta">
-                    <time dateTime={memo.created_at}>{formatTime(memo.created_at)}</time>
-                    {updated && <span className="edited">已编辑 {formatTime(memo.updated_at)}</span>}
-                    <StatusBadge memo={memo} />
-                    <div className="memo-actions" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className={`icon-button ${memo.keep_local ? "is-on" : ""}`}
-                        title={memo.keep_local ? "取消保留本地" : "保留本地"}
-                        aria-label={memo.keep_local ? "取消保留本地" : "保留本地"}
-                        onClick={() => void pin(memo)}
-                      >
-                        <PinIcon size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-button danger"
-                        title={memo.deleted ? "永久删除" : "删除"}
-                        aria-label={memo.deleted ? "永久删除笔记" : "删除笔记"}
-                        onClick={() => void remove(memo)}
-                      >
-                        <TrashIcon size={15} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {(memo.tags ?? []).length > 0 && (
-                    <div className="memo-tags" onClick={(e) => e.stopPropagation()}>
-                      {(memo.tags ?? []).map((tag) => (
-                        <TagChip key={tag.id} name={tag.name} onClick={onTag ? () => onTag(tag.name) : undefined} />
-                      ))}
-                    </div>
-                  )}
-
-                  {memo.local_state === "evicted" ? (
-                    <div className="evicted-banner">
-                      <span>正文与附件已清理，打开这条笔记时从 Notion 恢复。</span>
-                      <button type="button" className="link-btn" onClick={() => onOpen(memo)}>
-                        打开并恢复
-                      </button>
-                    </div>
-                  ) : (
-                    <div className={`memo-body ${open ? "is-open" : ""}`}>
-                      <BlockPreview
-                        blocks={preview.blocks}
-                        limit={open ? 500 : 4}
-                        onOpenLink={(url) => {
-                          backend.openURL(url).catch((err) => onError(String(err)));
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {preview.images.length > 0 && (
-                    <TimelineImages
-                      backend={backend}
-                      attachments={preview.images}
-                      collapsed={!open && preview.images.length > 2}
-                      onError={onError}
-                    />
-                  )}
-                  {preview.files.length > 0 && (
-                    <div className="timeline-files">
-                      {preview.files.slice(0, open ? 20 : 2).map((file) => (
-                        <button
-                          type="button"
-                          className="file-chip"
-                          key={file.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            backend.openAttachment(file.id).catch((err) => onError(String(err)));
-                          }}
-                        >
-                          <FileIcon size={14} />
-                          <span>{file.name}</span>
-                          <em>{humanBytes(file.bytes)}</em>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {(preview.long || (memo.attachments ?? []).length > 0) && (
-                    <button
-                      type="button"
-                      className="expand-button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggle(memo.id);
-                      }}
-                    >
-                      {open ? "收起" : "展开"}
-                      <ChevronIcon size={14} className={open ? "rotate-180" : ""} />
-                    </button>
-                  )}
-                </article>
-              );
-            })}
+            {group.memos.map((memo) => (
+              <MemoCard
+                key={memo.id}
+                memo={memo}
+                backend={backend}
+                open={expanded.has(memo.id)}
+                onToggle={() => toggle(memo.id)}
+                onOpen={() => onOpen(memo)}
+                onTag={onTag}
+                onError={onError}
+                onRemove={() => void remove(memo)}
+                onPin={() => void togglePin(memo)}
+                onKeepLocal={() => void toggleKeepLocal(memo)}
+              />
+            ))}
           </section>
         );
       })}
     </div>
+  );
+}
+
+function MemoCard({
+  memo,
+  backend,
+  open,
+  onToggle,
+  onOpen,
+  onTag,
+  onError,
+  onRemove,
+  onPin,
+  onKeepLocal,
+}: {
+  memo: Memo;
+  backend: MemoListBackend;
+  open: boolean;
+  onToggle: () => void;
+  onOpen: () => void;
+  onTag?: (tag: string) => void;
+  onError: (message: string) => void;
+  onRemove: () => void;
+  onPin: () => void;
+  onKeepLocal: () => void;
+}) {
+  const preview = memoPreview(memo);
+  const updated = memo.updated_at !== memo.created_at;
+
+  return (
+    <article
+      className={`memo-card ${open ? "is-open" : ""} ${memo.deleted ? "is-deleted" : ""} ${memo.pinned ? "is-pinned" : ""}`}
+      onClick={onOpen}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && e.target === e.currentTarget) onOpen();
+      }}
+    >
+      <div className="memo-meta">
+        <time dateTime={memo.created_at}>{formatTime(memo.created_at)}</time>
+        {updated && <span className="edited">已编辑 {formatTime(memo.updated_at)}</span>}
+        <StatusBadge memo={memo} />
+        <div className="memo-actions" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            className={`icon-button ${memo.pinned ? "is-on" : ""}`}
+            title={memo.pinned ? "取消置顶" : "置顶"}
+            aria-label={memo.pinned ? "取消置顶" : "置顶"}
+            onClick={onPin}
+          >
+            <PinIcon size={15} />
+          </button>
+          <button
+            type="button"
+            className={`icon-button ${memo.keep_local ? "is-on" : ""}`}
+            title={memo.keep_local ? "取消保留本地" : "保留本地"}
+            aria-label={memo.keep_local ? "取消保留本地" : "保留本地"}
+            onClick={onKeepLocal}
+          >
+            <LockIcon size={15} />
+          </button>
+          <button
+            type="button"
+            className="icon-button danger"
+            title={memo.deleted ? "永久删除" : "删除"}
+            aria-label={memo.deleted ? "永久删除笔记" : "删除笔记"}
+            onClick={onRemove}
+          >
+            <TrashIcon size={15} />
+          </button>
+        </div>
+      </div>
+
+      {(memo.tags ?? []).length > 0 && (
+        <div className="memo-tags" onClick={(e) => e.stopPropagation()}>
+          {(memo.tags ?? []).map((tag) => (
+            <TagChip key={tag.id} name={tag.name} onClick={onTag ? () => onTag(tag.name) : undefined} />
+          ))}
+        </div>
+      )}
+
+      {memo.local_state === "evicted" ? (
+        <div className="evicted-banner">
+          <span>正文与附件已清理，打开这条笔记时从 Notion 恢复。</span>
+          <button type="button" className="link-btn" onClick={() => onOpen()}>
+            打开并恢复
+          </button>
+        </div>
+      ) : (
+        <div className={`memo-body ${open ? "is-open" : ""}`}>
+          <BlockPreview
+            blocks={preview.blocks}
+            limit={open ? 500 : 4}
+            onOpenLink={(url) => {
+              backend.openURL(url).catch((err) => onError(String(err)));
+            }}
+          />
+        </div>
+      )}
+
+      {preview.images.length > 0 && (
+        <TimelineImages
+          backend={backend}
+          attachments={preview.images}
+          collapsed={!open && preview.images.length > 2}
+          onError={onError}
+        />
+      )}
+      {preview.files.length > 0 && (
+        <div className="timeline-files">
+          {preview.files.slice(0, open ? 20 : 2).map((file) => (
+            <button
+              type="button"
+              className="file-chip"
+              key={file.id}
+              onClick={(e) => {
+                e.stopPropagation();
+                backend.openAttachment(file.id).catch((err) => onError(String(err)));
+              }}
+            >
+              <FileIcon size={14} />
+              <span>{file.name}</span>
+              <em>{humanBytes(file.bytes)}</em>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {(preview.long || (memo.attachments ?? []).length > 0) && (
+        <button
+          type="button"
+          className="expand-button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
+        >
+          {open ? "收起" : "展开"}
+          <ChevronIcon size={14} className={open ? "rotate-180" : ""} />
+        </button>
+      )}
+    </article>
   );
 }
 
