@@ -1,13 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"embed"
 	"fmt"
-	"image"
-	"image/color"
-	"image/png"
 	"log"
 	"os"
 	"path/filepath"
@@ -451,7 +447,7 @@ func clampSticky(w *application.WebviewWindow, x, y int) (int, int) {
 func buildTray(app *application.App, hooks *appHooks, syncBoundary *services.SyncService, showSticky func()) *application.SystemTray {
 	tray := app.SystemTray.New()
 	tray.SetTooltip("memo")
-	tray.SetIcon(trayDot(34, 197, 94))
+	tray.SetIcon(appIcon)
 	// Left-click is the most direct way back to the app. Right-click keeps the
 	// full menu, and double-click is treated the same as a single click.
 	tray.OnClick(func() { hooks.ShowMainWindow() })
@@ -486,40 +482,15 @@ func applyTrayStatus(tray *application.SystemTray, status syncengine.Status) {
 	switch {
 	case !status.Enabled:
 		label = "memo — 同步关闭"
-		tray.SetIcon(trayDot(154, 163, 173))
 	case status.Paused:
 		label = "memo — 同步暂停"
-		tray.SetIcon(trayDot(154, 163, 173))
 	case status.State == domain.SyncError:
 		label = "memo — 同步错误"
-		tray.SetIcon(trayDot(220, 38, 38))
 	case status.State == domain.SyncSyncing:
 		label = "memo — 同步中"
-		tray.SetIcon(trayDot(37, 99, 235))
-	default:
-		tray.SetIcon(trayDot(34, 197, 94))
 	}
 	if status.Pending > 0 && status.Enabled {
 		label += fmt.Sprintf(" · %d 待同步", status.Pending)
 	}
 	tray.SetTooltip(label)
-}
-
-// trayDot renders a small solid status dot. Windows scales it for the tray.
-func trayDot(r, g, b uint8) []byte {
-	img := image.NewRGBA(image.Rect(0, 0, 32, 32))
-	for y := 0; y < 32; y++ {
-		for x := 0; x < 32; x++ {
-			dx := float64(x) - 15.5
-			dy := float64(y) - 15.5
-			if dx*dx+dy*dy <= 14*14 {
-				img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
-			}
-		}
-	}
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
-		return nil
-	}
-	return buf.Bytes()
 }
