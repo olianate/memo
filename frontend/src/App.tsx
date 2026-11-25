@@ -8,7 +8,7 @@ import { relativeTime } from "./lib/format";
 import { SettingsController } from "./lib/settings";
 import { WorkspaceController, useWorkspace } from "./lib/workspace";
 import { Sidebar } from "./components/Sidebar";
-import { JournalHeader, Topbar, ViewHeader } from "./components/Header";
+import { JournalFilters, JournalMasthead, Topbar, ViewHeader } from "./components/Header";
 import { Composer } from "./components/Composer";
 import { Timeline } from "./components/Timeline";
 import { MemoSheet } from "./components/MemoSheet";
@@ -99,9 +99,12 @@ export default function App({ backend }: { backend?: Backend }) {
       : view === "tag"
         ? `#${activeTag}`
         : view === "all"
-          ? `时间线 ${now.getFullYear()} · ${monthNames[now.getMonth()]}`
+          ? "时间线"
           : viewTitles[view];
-  const month = from.slice(0, 7);
+  const topbarSubtitle =
+    view === "all" && !selected && !queryText ? `${now.getFullYear()} · ${monthNames[now.getMonth()]}` : "";
+  const month =
+    from.slice(0, 7) || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
   const setMonth = (value: string) => {
     if (!value) return;
@@ -163,7 +166,7 @@ export default function App({ backend }: { backend?: Backend }) {
           onClick={controller.toggleFilters}
           aria-label="选择日期"
         >
-          <FilterIcon size={13} /> {dateLabel || "日期"}
+          <FilterIcon size={13} /> <span>{dateLabel || "日期"}</span>
         </button>
         {showFilters && (
           <div className="filter-popover">
@@ -203,9 +206,7 @@ export default function App({ backend }: { backend?: Backend }) {
         <>
           <div className="sidebar-scrim" aria-hidden="true" onClick={controller.toggleSidebar} />
           <Sidebar
-            counts={counts}
             activeView={view}
-            activeTag={activeTag}
             heatmap={dashboard?.year ?? []}
             month={month}
             theme={(settings?.theme ?? "light") as "light" | "dark" | "system"}
@@ -224,10 +225,11 @@ export default function App({ backend }: { backend?: Backend }) {
           onQuery={controller.setQuery}
           sync={sync && !online ? { ...sync, state: "offline" as const } : sync}
           title={topbarTitle}
+          subtitle={topbarSubtitle}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={controller.toggleSidebar}
           onToggleSync={() => void controller.toggleSync()}
-          onNew={startNew}
+          right={!selected && view !== "stats" && view !== "settings" ? headerActions : undefined}
         />
 
         {!online && (
@@ -291,19 +293,10 @@ export default function App({ backend }: { backend?: Backend }) {
                   right={headerActions}
                 />
               ) : (
-                <JournalHeader
+                <JournalMasthead
                   view={view}
                   title={view === "tag" ? `#${activeTag}` : viewTitles[view]}
-                  subtitle={subtitle}
-                  tags={tags}
-                  counts={counts}
-                  activeTag={activeTag}
-                  activeView={view}
                   heatmap={dashboard?.year ?? []}
-                  onView={controller.setView}
-                  onTag={(name) => (activeTag === name ? controller.setView("all") : controller.setTag(name))}
-                  onRefresh={controller.refresh}
-                  right={headerActions}
                 />
               )}
 
@@ -324,6 +317,14 @@ export default function App({ backend }: { backend?: Backend }) {
                       submitOnEnter={settings?.submit_on_enter ?? true}
                     />
                   )}
+                  <JournalFilters
+                    tags={tags}
+                    counts={counts}
+                    activeTag={activeTag}
+                    activeView={view}
+                    onView={controller.setView}
+                    onTag={(name) => (activeTag === name ? controller.setView("all") : controller.setTag(name))}
+                  />
                   <Timeline
                     memos={memos}
                     backend={b}

@@ -1,12 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Attachment, Memo } from "../types";
 import type { MemoListBackend } from "../backend";
 import { BlockPreview } from "../lib/markdown";
 import { memoPreview } from "../lib/preview";
-import { groupByDay } from "../lib/group";
 import { dayLabel, formatTime, humanBytes } from "../lib/format";
-import { EmptyState, StatusBadge, TagChip } from "./common";
+import { EmptyState } from "./common";
 import { ChevronIcon, CloseIcon, FileIcon, LockIcon, PinIcon, TrashIcon } from "./Icons";
+
+interface MemoDay {
+  day: string;
+  memos: Memo[];
+}
+
+/** Groups memos by local day, newest day first; pinned memos keep their day. */
+function groupByDay(memos: Memo[]): MemoDay[] {
+  const days = new Map<string, Memo[]>();
+  for (const memo of memos) {
+    const day = memo.day || memo.created_at.slice(0, 10);
+    const bucket = days.get(day);
+    if (bucket) bucket.push(memo);
+    else days.set(day, [memo]);
+  }
+  return Array.from(days.entries())
+    .sort(([a], [b]) => (a < b ? 1 : a > b ? -1 : 0))
+    .map(([day, list]) => ({ day, memos: list }));
+}
+
+function localIso(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
 
 export function Timeline({
   memos,
@@ -30,6 +52,9 @@ export function Timeline({
   emptyHint?: string;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const groups = useMemo(() => groupByDay(memos), [memos]);
+  const today = localIso(new Date());
 
   const toggle = (id: string) => {
     setExpanded((prev) => {
@@ -85,47 +110,21 @@ export function Timeline({
     return <EmptyState title={emptyTitle} hint={emptyHint} />;
   }
 
-  const pinned = memos.filter((memo) => memo.pinned && !memo.deleted);
-  const rest = memos.filter((memo) => !(memo.pinned && !memo.deleted));
-  const groups = groupByDay(rest);
-
   return (
     <div className="timeline">
-      {pinned.length > 0 && (
-        <section className="day-group pinned-group" key="pinned">
-          <div className="day-header">
-            <h3>置顶</h3>
-            <span>保持在最前</span>
-            <i className="day-line" aria-hidden="true" />
-            <em>{pinned.length} 条</em>
-          </div>
-          {pinned.map((memo) => (
-            <MemoCard
-              key={memo.id}
-              memo={memo}
-              backend={backend}
-              open={expanded.has(memo.id)}
-              onToggle={() => toggle(memo.id)}
-              onOpen={() => onOpen(memo)}
-              onTag={onTag}
-              onError={onError}
-              onRemove={() => void remove(memo)}
-              onPin={() => void togglePin(memo)}
-              onKeepLocal={() => void toggleKeepLocal(memo)}
-            />
-          ))}
-        </section>
-      )}
       {groups.map((group) => {
         const label = dayLabel(group.day);
+        const isToday = group.day === today;
         return (
           <section className="day-group" key={group.day}>
-            <div className="day-header">
-              <h3>{label.title}</h3>
-              <span>{label.sub}</span>
-              <i className="day-line" aria-hidden="true" />
-              <em>{group.memos.length} 条</em>
-            </div>
+            {!isToday && (
+              <div className="day-header">
+                <h3>{label.title}</h3>
+                <span className="day-week">{label.sub}</span>
+                <i className="day-line" aria-hidden="true" />
+                <em>{group.memos.length} 条</em>
+              </div>
+            )}
             {group.memos.map((memo) => (
               <MemoCard
                 key={memo.id}
@@ -146,6 +145,23 @@ export function Timeline({
       })}
     </div>
   );
+}
+
+function memoState(memo: Memo): string {
+  if (memo.local_state === "evicted") return "已清理正文";
+  if (memo.sync_error) return "同步失败";
+  if (!memo.notion_page_id) return "仅本地";
+  if ((memo.attachments ?? []).some((a) => !a.notion_file_id)) return "附件待同步";
+  return "已同步";
+}
+
+function memoFoot(memo: Memo): string {
+  const parts = [memoState(memo)];
+  const edited = memo.updated_at !== memo.created_at;
+  if (memo.pinned) parts.push(`置顶于 ${formatTime(memo.updated_at)}`);
+  else if (edited) parts.push(`编辑于 ${formatTime(memo.updated_at)}`);
+  else if ((memo.tags ?? []).length === 0) parts.push("无标签");
+  return parts.join(" · ");
 }
 
 function MemoCard({
@@ -172,7 +188,6 @@ function MemoCard({
   onKeepLocal: () => void;
 }) {
   const preview = memoPreview(memo);
-  const updated = memo.updated_at !== memo.created_at;
 
   return (
     <article
@@ -184,53 +199,11 @@ function MemoCard({
       }}
     >
       <div className="entry-time">
-        <time dateTime={memo.created_at}>{formatTime(memo.created_at)}</time>
         {memo.pinned && <PinIcon size={11} />}
+        <time dateTime={memo.created_at}>{formatTime(memo.created_at)}</time>
       </div>
 
       <div className="entry-main">
-        <div className="memo-meta">
-          {updated && <span className="edited">已编辑 {formatTime(memo.updated_at)}</span>}
-          <StatusBadge memo={memo} />
-          <div className="memo-actions" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className={`icon-button ${memo.pinned ? "is-on" : ""}`}
-              title={memo.pinned ? "取消置顶" : "置顶"}
-              aria-label={memo.pinned ? "取消置顶" : "置顶"}
-              onClick={onPin}
-            >
-              <PinIcon size={15} />
-            </button>
-            <button
-              type="button"
-              className={`icon-button ${memo.keep_local ? "is-on" : ""}`}
-              title={memo.keep_local ? "取消保留本地" : "保留本地"}
-              aria-label={memo.keep_local ? "取消保留本地" : "保留本地"}
-              onClick={onKeepLocal}
-            >
-              <LockIcon size={15} />
-            </button>
-            <button
-              type="button"
-              className="icon-button danger"
-              title={memo.deleted ? "永久删除" : "删除"}
-              aria-label={memo.deleted ? "永久删除笔记" : "删除笔记"}
-              onClick={onRemove}
-            >
-              <TrashIcon size={15} />
-            </button>
-          </div>
-        </div>
-
-        {(memo.tags ?? []).length > 0 && (
-          <div className="memo-tags" onClick={(e) => e.stopPropagation()}>
-            {(memo.tags ?? []).map((tag) => (
-              <TagChip key={tag.id} name={tag.name} onClick={onTag ? () => onTag(tag.name) : undefined} />
-            ))}
-          </div>
-        )}
-
         {memo.local_state === "evicted" ? (
           <div className="evicted-banner">
             <span>正文与附件已清理，打开这条笔记时从 Notion 恢复。</span>
@@ -291,6 +264,55 @@ function MemoCard({
             <ChevronIcon size={14} className={open ? "rotate-180" : ""} />
           </button>
         )}
+
+        {(memo.tags ?? []).length > 0 && (
+          <div className="entry-tags" onClick={(e) => e.stopPropagation()}>
+            {(memo.tags ?? []).map((tag) => (
+              <button
+                type="button"
+                key={tag.id}
+                className="tag-chip"
+                onClick={onTag ? () => onTag(tag.name) : undefined}
+              >
+                <span className="hash" aria-hidden="true">#</span>
+                {tag.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="entry-foot">
+          <span className="entry-status">{memoFoot(memo)}</span>
+          <div className="memo-actions" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className={`icon-button ${memo.pinned ? "is-on" : ""}`}
+              title={memo.pinned ? "取消置顶" : "置顶"}
+              aria-label={memo.pinned ? "取消置顶" : "置顶"}
+              onClick={onPin}
+            >
+              <PinIcon size={13} />
+            </button>
+            <button
+              type="button"
+              className={`icon-button ${memo.keep_local ? "is-on" : ""}`}
+              title={memo.keep_local ? "取消保留本地" : "保留本地"}
+              aria-label={memo.keep_local ? "取消保留本地" : "保留本地"}
+              onClick={onKeepLocal}
+            >
+              <LockIcon size={13} />
+            </button>
+            <button
+              type="button"
+              className="icon-button danger"
+              title={memo.deleted ? "永久删除" : "删除"}
+              aria-label={memo.deleted ? "永久删除笔记" : "删除笔记"}
+              onClick={onRemove}
+            >
+              <TrashIcon size={13} />
+            </button>
+          </div>
+        </div>
       </div>
     </article>
   );

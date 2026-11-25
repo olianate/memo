@@ -1,5 +1,11 @@
 /* Responsive ------------------------------------------------------------- */
 
+@media (max-width: 900px) {
+  .topbar-brand span.topbar-title {
+    display: block;
+  }
+}
+
 @media (max-width: 1000px) {
   .stream-wrap {
     width: min(790px, calc(100% - 64px));
@@ -23,6 +29,10 @@
 
   .stream-wrap {
     width: calc(100% - 52px);
+  }
+
+  .mast-heat {
+    display: none;
   }
 
   .review-title {
@@ -129,6 +139,11 @@
     font-size: 13px;
   }
 
+  .topbar-title span,
+  .filter-anchor .text-button span {
+    display: none;
+  }
+
   .sync-chip span {
     display: none;
   }
@@ -151,35 +166,15 @@
   }
 
   .masthead {
-    padding-bottom: 17px;
-  }
-
-  .mast-top {
-    flex-direction: column;
-    gap: 16px;
+    padding-bottom: 0;
   }
 
   .masthead h1 {
-    font-size: 32px;
+    font-size: 36px;
   }
 
   .masthead h1 em {
     font-size: 16px;
-  }
-
-  .mast-side {
-    width: 100%;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .mast-side .heatmap.is-compact {
-    display: none;
-  }
-
-  .mast-actions {
-    max-width: 100%;
   }
 
   .filters-row {
@@ -199,7 +194,7 @@
   }
 
   .day-header {
-    padding-left: 64px;
+    padding-left: 0;
   }
 
   .day-header h3 {
@@ -208,15 +203,11 @@
 
   .memo-card {
     grid-template-columns: 52px minmax(0, 1fr);
-    gap: 12px;
+    gap: 0;
   }
 
   .entry-main {
     padding-right: 0;
-  }
-
-  .memo-card.is-pinned .entry-main {
-    padding-left: 12px;
   }
 
   .memo-actions {
@@ -225,7 +216,7 @@
   }
 
   .entry-time {
-    font-size: 9px;
+    font-size: 9.5px;
   }
 
   .timeline-image {
@@ -342,14 +333,6 @@
     padding: 22px 20px;
   }
 
-  .sheet.is-inline {
-    padding: 0;
-  }
-
-  .sheet.is-inline .sheet-header h2 {
-    font-size: 28px;
-  }
-
   .reader-page {
     padding-top: 22px;
   }
@@ -361,15 +344,9 @@
   }
 
   .topbar-title {
-    display: none;
-  }
-
-  .topbar-new {
-    display: none;
-  }
-
-  .masthead h1 {
-    font-size: 28px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .mast-stats {
@@ -380,22 +357,8 @@
     margin: 0 6px;
   }
 
-  .day-header {
-    gap: 7px;
-    padding-left: 58px;
-  }
-
   .day-header span {
     display: none;
-  }
-
-  .timeline::before {
-    left: 46px;
-  }
-
-  .memo-card {
-    grid-template-columns: 46px minmax(0, 1fr);
-    gap: 10px;
   }
 
   .memo-body {
@@ -403,7 +366,7 @@
   }
 
   .composer-hint {
-    max-width: 180px;
+    display: none;
   }
 
   .timeline-image {
@@ -473,19 +436,15 @@
     display: inline-flex;
   }
 
-  .topbar-new {
-    display: inline-flex;
-  }
-
-  .send-button {
-    min-width: 32px;
-    width: 32px;
-    padding: 0;
+  .composer .send-button {
+    min-width: 0;
+    width: auto;
+    padding: 0 12px;
     justify-content: center;
   }
 
-  .send-button > span:not(.send-arrow) {
-    display: none;
+  .composer .send-button > span:not(.send-arrow) {
+    display: inline;
   }
 
   .send-button .send-arrow {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Timeline } from "../components/Timeline";
 import { demoBackend } from "../demoBackend";
@@ -32,7 +32,7 @@ describe("Timeline", () => {
     );
     expect(screen.getByText("第一条")).toBeInTheDocument();
     expect(screen.getByText("第二条")).toBeInTheDocument();
-    expect(screen.getByText("#产品")).toBeInTheDocument();
+    expect(screen.getByText("产品")).toBeInTheDocument();
     expect(screen.getAllByText(/\d+ 条/)).toHaveLength(2);
   });
 
@@ -73,7 +73,7 @@ describe("Timeline", () => {
     expect(screen.queryByText(/\| a \| b \|/)).not.toBeInTheDocument();
   });
 
-  it("shows pinned memos in a section above the timeline", () => {
+  it("keeps pinned memos in their day group and marks them", () => {
     const memos = [
       memo({ id: "p1", day: "2026-11-20", body: "置顶内容", pinned: true }),
       memo({ id: "m1", day: "2026-11-22", body: "普通内容" }),
@@ -88,12 +88,11 @@ describe("Timeline", () => {
         onError={() => {}}
       />,
     );
-    const section = screen.getByText("置顶").closest("section");
-    expect(section).not.toBeNull();
-    expect(within(section!).getByText("置顶内容")).toBeInTheDocument();
-    expect(within(section!).queryByText("普通内容")).not.toBeInTheDocument();
+    const pinnedCard = screen.getByText("置顶内容").closest("article");
+    expect(pinnedCard).toHaveClass("is-pinned");
+    expect(screen.queryByText("置顶")).not.toBeInTheDocument();
     const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
-    expect(headings[0]).toBe("置顶");
+    expect(headings[0]).toContain("11月22日");
   });
 
   it("toggles pinning from the card action", async () => {

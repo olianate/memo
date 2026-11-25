@@ -335,6 +335,9 @@
 .bar-chart {
   align-items: flex-end;
   gap: 3px;
+  height: 100px;
+  padding-top: 0;
+  border-bottom: 0;
 }
 
 .bar-column .bar {
@@ -343,10 +346,18 @@
 }
 
 .bar-column .bar[data-empty="true"] {
-  background: var(--line);
+  background: color-mix(in srgb, var(--accent) 18%, var(--paper-3));
 }
 
-.bar-column em,
+.bar-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 8.5px;
+}
+
 .hour-axis span {
   color: var(--faint);
   font-family: var(--mono);

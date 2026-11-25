@@ -201,22 +201,22 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
-  margin-top: 22px;
-  padding-top: 15px;
-  border-top: 1px solid var(--line);
+  gap: 2px;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .rail-month {
   position: relative;
   width: 100%;
-  height: 27px;
+  height: 34px;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--faint);
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9.5px;
   line-height: 1;
   transition: color 160ms var(--ease), background 160ms var(--ease);
 }
@@ -227,19 +227,7 @@ button {
 }
 
 .rail-month.is-current {
-  color: var(--ink-2);
-}
-
-.rail-month.is-current::before {
-  content: "";
-  position: absolute;
-  left: 13px;
-  top: 50%;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--line-2);
-  transform: translateY(-50%);
+  color: var(--faint);
 }
 
 .rail-month.is-active {
@@ -250,13 +238,13 @@ button {
 .rail-month.is-active::before {
   content: "";
   position: absolute;
-  left: 13px;
-  top: 50%;
+  left: 50%;
+  top: 3px;
   width: 3px;
   height: 3px;
+  margin-left: -1.5px;
   border-radius: 50%;
   background: var(--accent);
-  transform: translateY(-50%);
 }
 
 .rail-nav,
@@ -270,27 +258,27 @@ button {
 
 .rail-nav {
   margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
+  padding-top: 0;
+  border-top: 0;
 }
 
 .rail-foot {
   margin-top: auto;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  border-top: 0;
 }
 
 .rail-item {
   position: relative;
-  width: 40px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 9px;
   padding: 0;
   border: 0;
-  border-radius: 2px;
+  border-radius: 50%;
   background: transparent;
   color: var(--faint);
   font-size: 11px;
@@ -315,6 +303,13 @@ button {
   display: none;
 }
 
+.rail-sep {
+  width: 18px;
+  height: 1px;
+  margin: 6px 0;
+  background: var(--line);
+}
+
 /* Topbar ----------------------------------------------------------------- */
 
 .main-area {
@@ -333,9 +328,9 @@ button {
   display: flex;
   align-items: center;
   gap: 20px;
-  padding: 0 30px 0 22px;
-  background: color-mix(in srgb, var(--paper) 88%, transparent);
-  backdrop-filter: blur(16px);
+  padding: 0 26px 0 32px;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
   position: relative;
   z-index: 30;
@@ -362,13 +357,22 @@ button {
 
 .topbar-title {
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.04em;
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.topbar-title span {
+  margin-left: 9px;
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  color: var(--faint);
 }
 
 .topbar-brand-mark {
@@ -462,25 +466,6 @@ button {
   color: var(--ink);
 }
 
-.topbar-new {
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--line-2);
-  border-radius: 50%;
-  background: transparent;
-  color: var(--ink-2);
-  transition: color 160ms var(--ease), border-color 160ms var(--ease), background 160ms var(--ease);
-}
-
-.topbar-new:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
 .topbar-actions {
   display: flex;
   align-items: center;
@@ -550,7 +535,7 @@ button {
 .stream-wrap {
   width: min(790px, calc(100% - 96px));
   margin: 0 auto;
-  padding: 36px 0 96px;
+  padding: 0 48px 110px;
 }
 
 /* Masthead --------------------------------------------------------------- */
@@ -560,15 +545,15 @@ button {
 }
 
 .masthead {
-  padding: 2px 0 22px;
-  border-bottom: 1px solid var(--line);
+  padding: 34px 0 0;
+  border-bottom: 0;
 }
 
 .mast-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 36px;
+  gap: 24px;
 }
 
 .mast-lead {
@@ -576,6 +561,8 @@ button {
 }
 
 .mast-dow {
+  display: block;
+  margin-bottom: 4px;
   font-family: var(--mono);
   font-size: 10.5px;
   letter-spacing: 0.16em;
@@ -584,17 +571,17 @@ button {
 }
 
 .masthead h1 {
-  margin: 9px 0 0;
+  margin: 0;
   font-family: var(--serif);
   font-size: 44px;
   font-weight: 600;
-  line-height: 1.15;
-  letter-spacing: -0.025em;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
   color: var(--ink);
 }
 
 .masthead h1 em {
-  margin-left: 6px;
+  margin-left: 8px;
   font-size: 19px;
   font-style: normal;
   font-weight: 400;
@@ -606,15 +593,13 @@ button {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0;
-  margin-top: 12px;
-  color: var(--faint);
+  gap: 10px;
+  margin-top: 8px;
+  color: var(--ink-2);
   font-size: 12px;
 }
 
-.mast-stats span + span::before {
-  content: "/";
-  margin: 0 9px;
+.mast-stats .sep {
   color: var(--line-2);
 }
 
@@ -623,11 +608,20 @@ button {
   font-weight: 600;
 }
 
-.mast-sub {
-  margin: 7px 0 0;
+.mast-heat {
+  flex: 0 0 auto;
+  width: 132px;
+  padding-top: 4px;
+}
+
+.mast-heat small {
+  display: block;
+  margin-top: 5px;
   color: var(--faint);
-  font-size: 11.5px;
-  line-height: 1.6;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  line-height: 1.4;
+  text-align: right;
 }
 
 .mast-side {
@@ -639,7 +633,8 @@ button {
   padding-top: 3px;
 }
 
-.mast-side .heatmap.is-compact {
+.mast-side .heatmap.is-compact,
+.mast-heat .heatmap.is-compact {
   width: 132px;
   padding: 0;
   gap: 2px;
@@ -647,7 +642,8 @@ button {
   grid-template-rows: repeat(7, 7px) !important;
 }
 
-.mast-side .heat-cell {
+.mast-side .heat-cell,
+.mast-heat .heat-cell {
   border-radius: 1px;
 }
 
@@ -683,21 +679,26 @@ button {
 
 .filters-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 20px;
-  padding: 13px 0 9px;
-  border-bottom: 1px solid var(--line);
-  overflow-x: auto;
-  scrollbar-width: none;
+  gap: 14px;
+  margin-top: 20px;
+  padding: 0;
+  border-bottom: 0;
+  color: var(--ink-2);
+  font-size: 11.5px;
 }
 
-.filters-row::-webkit-scrollbar {
-  display: none;
+.filters-actions {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-left: auto;
 }
 
 .filter-text {
   flex: 0 0 auto;
-  padding: 2px 0;
+  padding: 0 0 2px;
   border: 0;
   border-bottom: 1px solid transparent;
   background: transparent;
@@ -709,10 +710,10 @@ button {
 }
 
 .filter-text em {
-  margin-left: 4px;
+  margin-left: 3px;
   color: var(--faint);
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 9px;
   font-style: normal;
 }
 
@@ -727,16 +728,14 @@ button {
 
 .tagline {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 15px;
-  padding: 10px 0 16px;
-  border-bottom: 1px solid var(--line);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.tagline::-webkit-scrollbar {
-  display: none;
+  gap: 4px 12px;
+  margin-top: 9px;
+  padding: 0;
+  border-bottom: 0;
+  color: var(--faint);
+  font-size: 11px;
 }
 
 .tagline button {
@@ -749,6 +748,12 @@ button {
   font-size: 11px;
   line-height: 1.5;
   transition: color 160ms var(--ease);
+}
+
+.tagline .hash,
+.entry-tags .hash {
+  opacity: 0.6;
+  margin-right: 1px;
 }
 
 .tagline button:hover,

@@ -136,14 +136,18 @@ export function StatsPage({
           <span>{formatMonth(month)} · 共 {data.totals.notes} 条</span>
         </div>
         <div className="bar-chart daily-chart">
-          {data.daily.map((day, index) => (
+          {data.daily.map((day) => (
             <div className="bar-column" key={day.date} title={`${day.date} · ${day.count} 条`}>
               <span className="bar" style={{ height: `${(day.count / maxDaily) * 100}%` }} data-empty={day.count === 0} />
-              {(index === 0 || (index + 1) % 5 === 0 || index === data.daily.length - 1) && (
-                <em>{Number(day.date.slice(-2))}</em>
-              )}
             </div>
           ))}
+        </div>
+        <div className="bar-axis" aria-hidden="true">
+          {data.daily.map((day, index) =>
+            index === 0 || (index + 1) % 5 === 0 || index === data.daily.length - 1 ? (
+              <span key={day.date}>{Number(day.date.slice(-2))}</span>
+            ) : null,
+          )}
         </div>
       </section>
 

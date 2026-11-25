@@ -35,7 +35,8 @@ export function Composer({
   const saveKey = submitOnEnter ? "Enter" : "Shift+Enter";
   const newlineKey = submitOnEnter ? "Shift+Enter" : "Enter";
   const now = new Date();
-  const todayLabel = `${now.getMonth() + 1}月${now.getDate()}日 · 周${"日一二三四五六"[now.getDay()]}`;
+  const nowTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const todayLabel = `${now.getMonth() + 1}月${now.getDate()}日 · ${nowTime}`;
 
   const save = async () => {
     if (saving || uploading.current) return;
@@ -100,10 +101,7 @@ export function Composer({
   return (
     <div className="composer">
       <div className="composer-head">
-        <span className="composer-eyebrow">
-          <span className="ink-dot" aria-hidden="true" />
-          现在
-        </span>
+        <span className="composer-eyebrow">现在</span>
         <span className="composer-date">{todayLabel}</span>
       </div>
       <MarkdownEditor
@@ -115,14 +113,15 @@ export function Composer({
         onTagsChange={setTags}
         onSubmit={() => void save()}
         submitOnEnter={submitOnEnter}
-        placeholder="记录此刻的想法… 支持 Markdown"
+        placeholder="写点什么，不必想好标题…"
+        toolsInFooter
+        footerHint={
+          draftId ? `草稿已保存，继续编辑后按 ${saveKey} 更新` : `${saveKey} 保存 · ${newlineKey} 换行`
+        }
         onAddAttachment={(files) => void addFiles(files)}
         onRemoveAttachment={(id) => void removeAttachment(id)}
       />
       <div className="composer-footer">
-        <span className="composer-hint">
-          {draftId ? `草稿已保存，继续编辑后按 ${saveKey} 更新` : `${saveKey} 保存 · ${newlineKey} 换行`}
-        </span>
         {error && <span className="inline-error">{error}</span>}
         <button type="button" className="send-button" onClick={() => void save()} disabled={saving} aria-label="保存笔记">
           {saving ? (

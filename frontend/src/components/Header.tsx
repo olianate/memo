@@ -7,7 +7,6 @@ import {
   CloudIcon,
   CloseIcon,
   PanelLeftIcon,
-  PlusIcon,
   SearchIcon,
   RefreshIcon,
 } from "./Icons";
@@ -17,19 +16,21 @@ export function Topbar({
   onQuery,
   sync,
   title,
+  subtitle,
   sidebarOpen,
   onToggleSidebar,
   onToggleSync,
-  onNew,
+  right,
 }: {
   query: string;
   onQuery: (value: string) => void;
   sync: SyncStatus | null;
   title: string;
+  subtitle?: string;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   onToggleSync: () => void;
-  onNew: () => void;
+  right?: ReactNode;
 }) {
   const state = sync?.state ?? "idle";
   const label = !sync
@@ -79,7 +80,10 @@ export function Topbar({
             <span className="topbar-brand-name">memo</span>
           </>
         )}
-        <span className="topbar-title">{title}</span>
+        <span className="topbar-title">
+          {title}
+          {subtitle && <span>{subtitle}</span>}
+        </span>
       </div>
 
       <div className="topbar-tools">
@@ -114,18 +118,10 @@ export function Topbar({
             <kbd>Ctrl K</kbd>
           )}
         </div>
-        <button
-          type="button"
-          className="topbar-new"
-          onClick={onNew}
-          aria-label="新建记录"
-          title="新建记录 · N"
-        >
-          <PlusIcon size={15} />
-        </button>
       </div>
 
       <div className="topbar-actions">
+        {right}
         <button
           type="button"
           className={`sync-chip is-${state}`}
@@ -193,32 +189,14 @@ function dayCounts(heatmap: DayCount[]): Map<string, number> {
   return counts;
 }
 
-export function JournalHeader({
+export function JournalMasthead({
   view,
   title,
-  subtitle,
-  tags,
-  counts,
-  activeTag,
-  activeView,
   heatmap,
-  onView,
-  onTag,
-  onRefresh,
-  right,
 }: {
   view: ViewId;
   title: string;
-  subtitle?: string;
-  tags: Tag[];
-  counts: Counts;
-  activeTag: string;
-  activeView: ViewId;
   heatmap: DayCount[];
-  onView: (view: ViewId) => void;
-  onTag: (tag: string) => void;
-  onRefresh?: () => void;
-  right?: ReactNode;
 }) {
   const now = new Date();
   const countsByDay = dayCounts(heatmap);
@@ -239,12 +217,10 @@ export function JournalHeader({
   }
 
   const dateView = view !== "tag" && view !== "trash";
-  const scope = view === "tag" ? `#${activeTag}` : title;
 
   return (
-    <div className="journal-head">
-      <div className="masthead">
-        <div className="mast-top">
+    <div className="masthead">
+      <div className="mast-top">
           <div className="mast-lead">
             <div className="mast-dow">
               {weekdayEn[now.getDay()]} · {now.getFullYear()}
@@ -255,42 +231,49 @@ export function JournalHeader({
                   {now.getMonth() + 1}月{now.getDate()}日 <em>星期{weekdayCn[now.getDay()]}</em>
                 </>
               ) : (
-                scope
+                title
               )}
             </h1>
             <div className="mast-stats">
               <span>
                 今天 <b>{todayCount}</b> 条
               </span>
+              <span className="sep" aria-hidden="true">/</span>
               <span>
                 本周 <b>{weekCount}</b> 条
               </span>
+              <span className="sep" aria-hidden="true">/</span>
               <span>
                 连续记录 <b>{streak}</b> 天
               </span>
             </div>
-            {subtitle && <p className="mast-sub">{subtitle}</p>}
           </div>
-          <div className="mast-side">
+          <div className="mast-heat">
             <Heatmap days={heatmap} weeks={18} compact />
-            <div className="mast-actions">
-              {onRefresh && (
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={onRefresh}
-                  aria-label="刷新"
-                  title="刷新"
-                >
-                  刷新
-                </button>
-              )}
-              {right}
-            </div>
+            <small>最近 18 周</small>
           </div>
         </div>
       </div>
+  );
+}
 
+export function JournalFilters({
+  tags,
+  counts,
+  activeTag,
+  activeView,
+  onView,
+  onTag,
+}: {
+  tags: Tag[];
+  counts: Counts;
+  activeTag: string;
+  activeView: ViewId;
+  onView: (view: ViewId) => void;
+  onTag: (tag: string) => void;
+}) {
+  return (
+    <div className="journal-filters">
       <div className="filters-row" aria-label="筛选">
         {filters.map((filter) => {
           const active = activeView === filter.id && !activeTag;
@@ -318,7 +301,8 @@ export function JournalHeader({
             onClick={() => onTag(tag.name)}
             aria-current={activeTag === tag.name ? "page" : undefined}
           >
-            #{tag.name}
+            <span className="hash" aria-hidden="true">#</span>
+            {tag.name}
           </button>
         ))}
         {tags.length === 0 && <span>还没有标签</span>}
