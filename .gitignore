@@ -20,6 +20,7 @@ patches/
 AGENTS.md
 **/AGENTS.md
 docs/agents/
+docs/prototypes/
 skills-lock.json
 
 # The vendored Wails CLI embeds its setup-wizard frontend at compile time.
