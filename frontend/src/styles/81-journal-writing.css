@@ -82,7 +82,7 @@
   justify-content: flex-start;
   gap: 4px;
   margin: 6px 0 0;
-  padding: 0 84px 0 0;
+  padding: 0 132px 0 0;
   min-height: 0;
 }
 
@@ -157,6 +157,14 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.composer-word-count {
+  flex: none;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  white-space: nowrap;
 }
 
 .composer-hint {
@@ -834,7 +842,15 @@
   line-height: 1.95;
 }
 
-.reader-body .editor-word-count,
+.reader-body .editor-word-count {
+  display: block;
+  margin-top: 10px;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  text-align: right;
+}
+
 .reader-body .tag-hint {
   display: none;
 }

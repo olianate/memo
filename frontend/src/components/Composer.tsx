@@ -3,6 +3,8 @@ import type { Attachment } from "../types";
 import type { MemoDraftBackend } from "../backend";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { fileToBase64 } from "../lib/files";
+import { countWords } from "../lib/format";
+import { blockText, blocksFromMarkdown } from "../lib/markdown";
 
 export function Composer({
   backend,
@@ -37,6 +39,7 @@ export function Composer({
   const now = new Date();
   const nowTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   const todayLabel = `${now.getMonth() + 1}月${now.getDate()}日 · ${nowTime}`;
+  const wordCount = countWords(blocksFromMarkdown(body).map(blockText).join(" "));
 
   const save = async () => {
     if (saving || uploading.current) return;
@@ -123,6 +126,9 @@ export function Composer({
       />
       <div className="composer-footer">
         {error && <span className="inline-error">{error}</span>}
+        <span className="composer-word-count" aria-label={`字数 ${wordCount}`}>
+          字数 {wordCount}
+        </span>
         <button type="button" className="send-button" onClick={() => void save()} disabled={saving} aria-label="保存笔记">
           {saving ? (
             <span className="spinner" />
