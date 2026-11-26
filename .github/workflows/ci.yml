@@ -46,8 +46,10 @@ jobs:
       - name: Go tests
         run: go test ./internal/... ./tools/...
 
+      # Wails' Linux backend needs GTK headers; vet the platform the app ships
+      # on instead, matching the Windows compile check below.
       - name: Go vet
-        run: go vet ./...
+        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go vet ./...
 
       - name: Check version files
         run: go run ./tools/release check

@@ -6,7 +6,7 @@ English | [简体中文](README.md)
 
 [![Release](https://img.shields.io/github/v/release/olianate/memo?label=release)](https://github.com/olianate/memo/releases/latest) [![Release workflow](https://github.com/olianate/memo/actions/workflows/release.yml/badge.svg)](https://github.com/olianate/memo/actions/workflows/release.yml)
 
-![memo main window](https://file%2B.vscode-resource.vscode-cdn.net/d%3A/dev/memo/docs/screenshots/timeline.png)
+![memo main window](docs/screenshots/timeline.png)
 
 ## Features
 
@@ -18,9 +18,9 @@ English | [简体中文](README.md)
 
 | Edit a memo | Quick capture |
 | --- | --- |
-|  |  |
+| ![Edit a memo](docs/screenshots/editor.png) | ![Quick capture](docs/screenshots/quick-capture.png) |
 
-![Statistics](https://file%2B.vscode-resource.vscode-cdn.net/d%3A/dev/memo/docs/screenshots/stats.png)
+![Statistics](docs/screenshots/stats.png)
 
 ## Download
 
