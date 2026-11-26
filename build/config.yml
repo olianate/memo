@@ -11,7 +11,7 @@ info:
   description: "Local-first memos with a Notion archive" # The application description
   copyright: "(c) 2026 olianate" # Copyright text
   comments: "Local-first memos with an optional Notion archive" # Comments
-  version: "1.3.0" # The application version
+  version: "1.4.0" # The application version
   cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles
   #                             # Matches build/appicon.icon; must stay in sync with the
   #                             # CFBundleIconName key in build/darwin/Info*.plist

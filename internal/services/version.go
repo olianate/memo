@@ -4,4 +4,4 @@ package services
 // release tag (v1.3.0 -> 1.3.0). Release builds may override it with:
 //
 //	go build -ldflags "-X github.com/olianate/memo/internal/services.Version=1.2.3"
-var Version = "1.3.0"
+var Version = "1.4.0"
