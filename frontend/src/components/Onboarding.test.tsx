@@ -27,6 +27,28 @@ describe("Onboarding", () => {
     expect(onSkip).toHaveBeenCalled();
   });
 
+  it("toggles the Notion token visibility and hides it on return", () => {
+    render(<Onboarding backend={demoBackend} onDone={() => {}} onSkip={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "连接我的 Notion" }));
+
+    const input = screen.getByLabelText("Notion 集成令牌");
+    expect(input).toHaveAttribute("type", "password");
+
+    fireEvent.click(screen.getByRole("button", { name: "显示令牌" }));
+    expect(input).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "隐藏令牌" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "隐藏令牌" }));
+    expect(input).toHaveAttribute("type", "password");
+
+    fireEvent.click(screen.getByRole("button", { name: "显示令牌" }));
+    fireEvent.click(screen.getByRole("button", { name: "返回" }));
+    fireEvent.click(screen.getByRole("button", { name: "连接我的 Notion" }));
+
+    expect(screen.getByLabelText("Notion 集成令牌")).toHaveAttribute("type", "password");
+    expect(screen.getByRole("button", { name: "显示令牌" })).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("lists databases and pages and uses a shared database directly", async () => {
     const validate = vi.fn(async () => workspace);
     const parentPages = vi.fn(async () => ({

@@ -120,6 +120,15 @@ export function Purge(id: string): $CancellablePromise<void> {
 }
 
 /**
+ * PurgeExpiredTrash permanently removes memos that have been in the trash for
+ * at least 30 days. It runs independently of Notion sync; purged pages are
+ * tombstoned and flushed by the next sync that reaches the server.
+ */
+export function PurgeExpiredTrash(): $CancellablePromise<number> {
+    return $Call.ByID(975667718);
+}
+
+/**
  * RemoveAttachment deletes an attachment and its block from the memo body.
  */
 export function RemoveAttachment(id: string): $CancellablePromise<void> {
@@ -138,6 +147,14 @@ export function Restore(id: string): $CancellablePromise<$models.MemoDTO> {
  */
 export function SetKeepLocal(id: string, keep: boolean): $CancellablePromise<void> {
     return $Call.ByID(2319042460, id, keep);
+}
+
+/**
+ * SetPinned moves a memo to the top of the timeline. Pinning is local-only and
+ * does not create a new revision or a sync change.
+ */
+export function SetPinned(id: string, pinned: boolean): $CancellablePromise<void> {
+    return $Call.ByID(3111228778, id, pinned);
 }
 
 /**

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type {
   ArchiveDatabase,
   ArchiveDatabasePreview,
@@ -8,7 +8,7 @@ import type {
 } from "../types";
 import type { OnboardingBackend } from "../backend";
 import { reportError } from "../lib/errorLog";
-import { CheckIcon, SearchIcon } from "./Icons";
+import { CheckIcon, EyeIcon, EyeOffIcon, SearchIcon } from "./Icons";
 
 type Step = "welcome" | "token" | "parent" | "done";
 
@@ -29,6 +29,8 @@ export function Onboarding({
 }) {
   const [step, setStep] = useState<Step>(connectOnly ? "token" : "welcome");
   const [token, setToken] = useState("");
+  const [showToken, setShowToken] = useState(false);
+  const tokenInputID = useId();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [databases, setDatabases] = useState<ArchiveDatabase[]>([]);
   const [pages, setPages] = useState<ParentPage[]>([]);
@@ -64,6 +66,11 @@ export function Onboarding({
       })
       .catch((e) => reportError(e, { action: "load_settings" }, "onboarding"));
   }, [backend]);
+
+  // Never leave the token visible once the user moves on.
+  useEffect(() => {
+    if (step !== "token") setShowToken(false);
+  }, [step]);
 
   useEffect(() => {
     if (step !== "parent") return;
@@ -257,14 +264,22 @@ export function Onboarding({
   return (
     <div className="onboarding">
       <div className="onboarding-card">
-        <div className="onboarding-brand">
-          <div className="brand-mark">m</div>
-          <div>
-            <strong>memo</strong>
-            <span>个人笔记 · 可选 Notion 归档</span>
+        <aside className="onboarding-aside">
+          <div className="onboarding-brand">
+            <div className="brand-mark">m</div>
+            <div>
+              <strong>memo</strong>
+              <span>个人笔记 · 可选 Notion 归档</span>
+            </div>
           </div>
-        </div>
+          <div className="onboarding-aside-note">
+            <span>本地优先</span>
+            <p>所有内容先写入本机 SQLite。Notion 只在你需要时参与归档与同步。</p>
+          </div>
+          <div className="onboarding-aside-foot">SQLite · 本地存储</div>
+        </aside>
 
+        <div className="onboarding-main">
         {step === "welcome" && (
           <>
             <h1>先写在本地，再决定要不要归档。</h1>
@@ -302,17 +317,31 @@ export function Onboarding({
               在 Notion 里创建一个集成，拿到 Personal Access Token，然后把目标数据库或页面共享给这个集成。
               令牌只保存在系统钥匙串，不会写进本地数据库或日志。
             </p>
-            <label className="field">
-              <span>Notion 集成令牌</span>
-              <input
-                type="password"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="ntn_…"
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </label>
+            <div className="field">
+              <label htmlFor={tokenInputID}>Notion 集成令牌</label>
+              <div className="field-input">
+                <input
+                  id={tokenInputID}
+                  type={showToken ? "text" : "password"}
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder="ntn_…"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button
+                  type="button"
+                  className="field-suffix"
+                  onClick={() => setShowToken((shown) => !shown)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  aria-label={showToken ? "隐藏令牌" : "显示令牌"}
+                  aria-pressed={showToken}
+                  title={showToken ? "隐藏令牌" : "显示令牌"}
+                >
+                  {showToken ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                </button>
+              </div>
+            </div>
             {workspace && (
               <div className="workspace-preview">
                 <span>工作区</span>
@@ -590,6 +619,7 @@ export function Onboarding({
             </div>
           </>
         )}
+        </div>
       </div>
     </div>
   );

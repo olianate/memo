@@ -2,8 +2,9 @@ import { useRef, useState } from "react";
 import type { Attachment } from "../types";
 import type { MemoDraftBackend } from "../backend";
 import { MarkdownEditor } from "./MarkdownEditor";
-import { SendIcon } from "./Icons";
 import { fileToBase64 } from "../lib/files";
+import { countWords } from "../lib/format";
+import { blockText, blocksFromMarkdown } from "../lib/markdown";
 
 export function Composer({
   backend,
@@ -35,6 +36,10 @@ export function Composer({
   const hasContent = () => body.trim().length > 0 || attachments.length > 0;
   const saveKey = submitOnEnter ? "Enter" : "Shift+Enter";
   const newlineKey = submitOnEnter ? "Shift+Enter" : "Enter";
+  const now = new Date();
+  const nowTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const todayLabel = `${now.getMonth() + 1}月${now.getDate()}日 · ${nowTime}`;
+  const wordCount = countWords(blocksFromMarkdown(body).map(blockText).join(" "));
 
   const save = async () => {
     if (saving || uploading.current) return;
@@ -98,6 +103,10 @@ export function Composer({
 
   return (
     <div className="composer">
+      <div className="composer-head">
+        <span className="composer-eyebrow">现在</span>
+        <span className="composer-date">{todayLabel}</span>
+      </div>
       <MarkdownEditor
         backend={backend}
         body={body}
@@ -107,17 +116,30 @@ export function Composer({
         onTagsChange={setTags}
         onSubmit={() => void save()}
         submitOnEnter={submitOnEnter}
-        placeholder="记录此刻的想法… 支持 Markdown"
+        placeholder="写点什么，不必想好标题…"
+        toolsInFooter
+        footerHint={
+          draftId ? `草稿已保存，继续编辑后按 ${saveKey} 更新` : `${saveKey} 保存 · ${newlineKey} 换行`
+        }
         onAddAttachment={(files) => void addFiles(files)}
         onRemoveAttachment={(id) => void removeAttachment(id)}
       />
       <div className="composer-footer">
-        <span className="composer-hint">
-          {draftId ? `草稿已保存，继续编辑后按 ${saveKey} 更新` : `${saveKey} 保存 · ${newlineKey} 换行`}
-        </span>
         {error && <span className="inline-error">{error}</span>}
+        <span className="composer-word-count" aria-label={`字数 ${wordCount}`}>
+          字数 {wordCount}
+        </span>
         <button type="button" className="send-button" onClick={() => void save()} disabled={saving} aria-label="保存笔记">
-          {saving ? <span className="spinner" /> : <SendIcon size={17} />}
+          {saving ? (
+            <span className="spinner" />
+          ) : (
+            <>
+              <span>保存</span>
+              <span className="send-arrow" aria-hidden="true">
+                ↑
+              </span>
+            </>
+          )}
         </button>
       </div>
     </div>

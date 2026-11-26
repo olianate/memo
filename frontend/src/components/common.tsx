@@ -55,7 +55,7 @@ export function StatusBadge({ memo }: { memo: Memo }) {
     return <span className="status-badge is-error" title={memo.sync_error}>同步失败</span>;
   }
   if (!memo.notion_page_id) {
-    return <span className="status-badge is-local">本地 only</span>;
+    return <span className="status-badge is-local">仅本地</span>;
   }
   if ((memo.attachments ?? []).some((a) => !a.notion_file_id)) {
     return <span className="status-badge is-local">附件待同步</span>;

@@ -14,6 +14,7 @@ describe("Composer", () => {
       snippet: "hello",
       deleted: false,
       keep_local: false,
+      pinned: false,
       local_state: "present",
       body: "",
       tags: [],

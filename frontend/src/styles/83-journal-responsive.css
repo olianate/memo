@@ -1,0 +1,529 @@
+/* Responsive ------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .topbar-brand span.topbar-title {
+    display: block;
+  }
+}
+
+@media (max-width: 1000px) {
+  .stream-wrap {
+    width: min(790px, calc(100% - 64px));
+  }
+
+  .topbar {
+    padding-right: 20px;
+  }
+}
+
+@media (max-width: 860px) {
+  .topbar .search-box {
+    width: 150px;
+  }
+
+  .sync-chip span {
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .stream-wrap {
+    width: calc(100% - 52px);
+  }
+
+  .mast-heat {
+    display: none;
+  }
+
+  .review-title {
+    font-size: 30px;
+  }
+}
+
+@media (max-width: 720px) {
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 70;
+    width: 248px;
+    flex-basis: auto;
+    align-items: stretch;
+    padding: 18px 14px;
+    border-right: 1px solid var(--line-2);
+    box-shadow: 24px 0 60px -38px rgba(28, 22, 14, 0.55);
+    animation: sidebar-in 220ms var(--ease);
+  }
+
+  .rail-top {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 10px;
+  }
+
+  .rail-mark,
+  .rail-new {
+    width: 34px;
+    height: 34px;
+  }
+
+  .rail-months {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 3px;
+    margin-top: 14px;
+    padding-top: 12px;
+  }
+
+  .rail-month {
+    flex: 1 1 40px;
+    width: auto;
+    height: 26px;
+    border-radius: 2px;
+  }
+
+  .rail-month.is-active::before {
+    display: none;
+  }
+
+  .rail-month.is-active {
+    background: var(--accent-soft);
+  }
+
+  .rail-nav,
+  .rail-foot {
+    align-items: stretch;
+    margin-top: 14px;
+    padding-top: 12px;
+  }
+
+  .rail-foot {
+    margin-top: auto;
+  }
+
+  .rail-item {
+    width: 100%;
+    height: 32px;
+    justify-content: flex-start;
+    padding: 0 9px;
+  }
+
+  .rail-item.is-active::before {
+    left: 0;
+  }
+
+  .rail-text {
+    display: inline;
+  }
+
+  .sidebar-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 65;
+    border: 0;
+    background: color-mix(in srgb, #17130e 38%, transparent);
+    backdrop-filter: blur(2px);
+  }
+
+  .topbar {
+    padding: 0 16px;
+    gap: 10px;
+  }
+
+  .topbar .search-box {
+    width: 120px;
+  }
+
+  .topbar-title {
+    font-size: 13px;
+  }
+
+  .topbar-title span,
+  .filter-anchor .text-button span {
+    display: none;
+  }
+
+  .sync-chip span {
+    display: none;
+  }
+
+  .sync-chip em {
+    display: none;
+  }
+
+  .content {
+    overflow-x: hidden;
+  }
+
+  .stream-wrap,
+  .reader-page,
+  .stats-page,
+  .settings-page {
+    width: calc(100% - 36px);
+    padding-top: 26px;
+    padding-bottom: 72px;
+  }
+
+  .masthead {
+    padding-bottom: 0;
+  }
+
+  .masthead h1 {
+    font-size: 36px;
+  }
+
+  .masthead h1 em {
+    font-size: 16px;
+  }
+
+  .filters-row {
+    gap: 16px;
+  }
+
+  .tagline {
+    gap: 13px;
+  }
+
+  .composer .atomic-editor-shell .cm-content {
+    font-size: 17px;
+  }
+
+  .timeline::before {
+    left: 52px;
+  }
+
+  .day-header {
+    padding-left: 0;
+  }
+
+  .day-header h3 {
+    font-size: 18px;
+  }
+
+  .memo-card {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .entry-main {
+    padding-right: 0;
+  }
+
+  .memo-actions {
+    opacity: 1;
+    transform: none;
+  }
+
+  .entry-time {
+    font-size: 9.5px;
+  }
+
+  .timeline-image {
+    flex-basis: 100%;
+    height: 190px;
+  }
+
+  .view-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .view-header h2 {
+    font-size: 26px;
+  }
+
+  .search-results {
+    width: 100%;
+  }
+
+  .search-result {
+    grid-template-columns: 70px minmax(0, 1fr);
+    gap: 7px 12px;
+  }
+
+  .stats-head {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .review-title {
+    font-size: 26px;
+    line-height: 1.45;
+  }
+
+  .stats-controls {
+    padding-top: 0;
+  }
+
+  .stat-totals {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 18px;
+    padding: 17px 0;
+  }
+
+  .stat-total {
+    padding: 0;
+  }
+
+  .stat-total:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .health-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px 0;
+  }
+
+  .health-grid > div:nth-child(odd) {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .settings-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .segmented {
+    flex-wrap: wrap;
+  }
+
+  .onboarding-card {
+    width: calc(100% - 24px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .onboarding-aside {
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding: 18px 24px;
+  }
+
+  .onboarding-aside-note {
+    flex: 1 1 100%;
+    order: 3;
+  }
+
+  .onboarding-aside-foot {
+    margin-left: 0;
+  }
+
+  .onboarding-main {
+    padding: 26px 24px 30px;
+  }
+
+  .onboarding-main h1 {
+    font-size: 28px;
+  }
+
+  .sheet-backdrop {
+    padding: 12px;
+  }
+
+  .sheet {
+    padding: 22px 20px;
+  }
+
+  .reader-page {
+    padding-top: 22px;
+  }
+}
+
+@media (max-width: 520px) {
+  .topbar .search-box {
+    width: 92px;
+  }
+
+  .topbar-title {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .mast-stats {
+    font-size: 11px;
+  }
+
+  .mast-stats span + span::before {
+    margin: 0 6px;
+  }
+
+  .day-header span {
+    display: none;
+  }
+
+  .memo-body {
+    font-size: 14.2px;
+  }
+
+  .composer-hint {
+    display: none;
+  }
+
+  .timeline-image {
+    height: 190px;
+  }
+
+  .stat-card-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .bucket-row {
+    grid-template-columns: 68px 1fr 34px;
+  }
+
+  .settings-page .settings-row .inline-form {
+    width: 100%;
+  }
+
+  .onboarding-main h1 {
+    font-size: 25px;
+  }
+
+  .onboarding-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .journal-head,
+  .reader-page,
+  .sidebar {
+    animation: none;
+  }
+
+  .memo-card:hover,
+  .timeline-image:hover img {
+    transform: none;
+  }
+}
+
+/* Journal — narrow screen refinements ------------------------------------ */
+
+@media (max-width: 520px) {
+  .topbar .search-box {
+    width: 118px;
+    min-width: 118px;
+    padding: 0 6px;
+    gap: 5px;
+  }
+
+  .topbar .search-box input {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    font-size: 11px;
+    opacity: 1;
+  }
+
+  .topbar .search-box kbd {
+    display: none;
+  }
+
+  .topbar .search-box .search-clear {
+    display: inline-flex;
+  }
+
+  .composer .send-button {
+    min-width: 0;
+    width: auto;
+    padding: 0 12px;
+    justify-content: center;
+  }
+
+  .composer .send-button > span:not(.send-arrow) {
+    display: inline;
+  }
+
+  .send-button .send-arrow {
+    display: inline;
+    font-size: 15px;
+    line-height: 1;
+  }
+
+  .memo-card .entry-main {
+    padding-left: 12px;
+  }
+
+  .entry-main .memo-actions {
+    opacity: 1;
+  }
+}
+
+/* Journal — quick capture details */
+
+.sticky-editor .editor-mode-label,
+.sticky-editor .toolbar-spacer {
+  display: none;
+}
+
+.sticky-editor .tag-row-editor {
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+}
+
+.sticky-editor .tag-add {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.sticky-editor .tag-add:hover {
+  color: var(--accent);
+  background: transparent;
+}
+
+.sticky-footer .send-button.small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 30px;
+  padding: 0 9px;
+}
+
+/* Journal — onboarding narrow layout */
+
+@media (max-width: 720px) {
+  .onboarding-aside {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px 16px;
+    padding: 16px 24px;
+  }
+
+  .onboarding-aside-note {
+    grid-column: 1 / -1;
+  }
+
+  .onboarding-aside-foot {
+    margin-left: 0;
+  }
+}
+
+.sticky-footer .send-button span {
+  display: inline;
+  color: var(--paper);
+  font-size: 14px;
+  line-height: 1;
+}
+
+[data-theme="dark"] .sticky-footer .send-button span {
+  color: var(--paper);
+}

@@ -7,7 +7,7 @@ import { demoBackend } from "./demoBackend";
 import { MarkdownEditor } from "./components/MarkdownEditor";
 import { fileToBase64 } from "./lib/files";
 import { installGlobalErrorHandlers, reportError, setErrorSink } from "./lib/errorLog";
-import { CloseIcon, PaperclipIcon, SendIcon } from "./components/Icons";
+import { CloseIcon, PaperclipIcon } from "./components/Icons";
 
 export default function StickyApp({ backend }: { backend?: StickyBackend }) {
   const b = backend ?? (isWailsRuntime() ? wailsBackend : demoBackend);
@@ -201,7 +201,7 @@ export default function StickyApp({ backend }: { backend?: StickyBackend }) {
           {error ? <span className="inline-error">{error}</span> : `${saveKey} 保存 · ${newlineKey} 换行 · Esc 隐藏 · ${syncLabel}`}
         </span>
         <button type="button" className="send-button small" onClick={() => void save()} disabled={saving} aria-label="保存">
-          {saving ? <span className="spinner" /> : <SendIcon size={15} />}
+          {saving ? <span className="spinner" /> : <span aria-hidden="true">↑</span>}
         </button>
       </footer>
 

@@ -88,6 +88,9 @@ export const wailsBackend: Backend = {
   async setKeepLocal(id, keep) {
     await MemoSvc.SetKeepLocal(id, keep);
   },
+  async setPinned(id, pinned) {
+    await MemoSvc.SetPinned(id, pinned);
+  },
   async hydrate(id) {
     return asMemo(await MemoSvc.Hydrate(id));
   },

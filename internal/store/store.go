@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,7 +15,12 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 3
+const schemaVersion = 4
+
+// ErrLegacyProfile reports a data directory written before Markdown became the
+// canonical body (1.2 and earlier). There is no in-place migration: the bodies
+// stay untouched and the user has to back up and reset the profile.
+var ErrLegacyProfile = errors.New("store: this profile stores memos as block JSON from an older version")
 
 // Store wraps the SQLite database. All methods are safe for concurrent use.
 type Store struct {
@@ -95,13 +101,23 @@ func (s *Store) migrate() error {
 					return fmt.Errorf("store: inspect legacy body: %w", err)
 				}
 				if stale > 0 {
-					return fmt.Errorf("store: this profile stores memos as block JSON from an older version; " +
-						"this release cannot read it and will not silently discard the bodies. " +
-						"Reset local data or restore a backup made by this version")
+					return fmt.Errorf("%w; this release cannot read it and will not silently discard the bodies. "+
+						"Reset local data or restore a backup made by this version", ErrLegacyProfile)
 				}
 			}
 			if _, err := s.db.Exec(`ALTER TABLE memos ADD COLUMN body_md TEXT NOT NULL DEFAULT ''`); err != nil {
 				return fmt.Errorf("store: migrate v3: %w", err)
+			}
+		}
+	}
+	if version < 4 {
+		hasPinned, err := s.hasColumn("memos", "pinned")
+		if err != nil {
+			return err
+		}
+		if !hasPinned {
+			if _, err := s.db.Exec(`ALTER TABLE memos ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`); err != nil {
+				return fmt.Errorf("store: migrate v4: %w", err)
 			}
 		}
 	}
@@ -143,6 +159,7 @@ CREATE TABLE IF NOT EXISTS memos (
   snippet TEXT NOT NULL DEFAULT '',
   deleted_at INTEGER,
   keep_local INTEGER NOT NULL DEFAULT 0,
+  pinned INTEGER NOT NULL DEFAULT 0,
   local_state TEXT NOT NULL DEFAULT 'present',
   notion_page_id TEXT NOT NULL DEFAULT '',
   notion_synced_at INTEGER,
@@ -237,7 +254,7 @@ CREATE TABLE IF NOT EXISTS purged_pages (
 `
 
 const memoColumns = `id, created_at, updated_at, revision, body_md, body_text, snippet,
-  deleted_at, keep_local, local_state, notion_page_id, notion_synced_at,
+  deleted_at, keep_local, pinned, local_state, notion_page_id, notion_synced_at,
   last_hydrated_at, base_revision, content_hash, sync_error, block_stats`
 
 func toMS(t time.Time) int64 { return t.UTC().UnixMilli() }

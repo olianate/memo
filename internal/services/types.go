@@ -20,6 +20,7 @@ type MemoDTO struct {
 	Deleted        bool            `json:"deleted"`
 	DeletedAt      string          `json:"deleted_at,omitempty"`
 	KeepLocal      bool            `json:"keep_local"`
+	Pinned         bool            `json:"pinned"`
 	LocalState     string          `json:"local_state"`
 	NotionPageID   string          `json:"notion_page_id,omitempty"`
 	NotionSyncedAt string          `json:"notion_synced_at,omitempty"`
@@ -99,6 +100,7 @@ func toMemoDTO(m domain.Memo) MemoDTO {
 		Snippet:      m.Snippet,
 		Deleted:      m.DeletedAt != nil,
 		KeepLocal:    m.KeepLocal,
+		Pinned:       m.Pinned,
 		LocalState:   string(m.LocalState),
 		NotionPageID: m.NotionPageID,
 		SyncError:    m.SyncError,

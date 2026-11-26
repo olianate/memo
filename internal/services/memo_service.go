@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/olianate/memo/internal/attachments"
 	"github.com/olianate/memo/internal/domain"
@@ -151,6 +152,38 @@ func (s *MemoService) EmptyTrash() (int, error) {
 	return purged, nil
 }
 
+// trashRetention is how long a memo stays recoverable in the local trash.
+const trashRetention = 30 * 24 * time.Hour
+
+// PurgeExpiredTrash permanently removes memos that have been in the trash for
+// at least 30 days. It runs independently of Notion sync; purged pages are
+// tombstoned and flushed by the next sync that reaches the server.
+func (s *MemoService) PurgeExpiredTrash() (int, error) {
+	return s.purgeExpiredTrash(contextBackground(), time.Now().UTC())
+}
+
+func (s *MemoService) purgeExpiredTrash(ctx context.Context, now time.Time) (int, error) {
+	memos, err := s.store.DeletedMemos(ctx)
+	if err != nil {
+		return 0, err
+	}
+	purged := 0
+	for i := range memos {
+		memo := memos[i]
+		if memo.DeletedAt == nil || now.Before(memo.DeletedAt.Add(trashRetention)) {
+			continue
+		}
+		if err := s.purgeMemo(ctx, memo); err != nil {
+			return purged, err
+		}
+		purged++
+	}
+	if purged > 0 {
+		_ = s.store.Log(ctx, "info", "trash", fmt.Sprintf("自动清理了 %d 条超过 30 天的回收站笔记", purged))
+	}
+	return purged, nil
+}
+
 func (s *MemoService) purgeMemo(ctx context.Context, memo domain.Memo) error {
 	if memo.NotionPageID != "" {
 		if err := s.store.MarkPagePurged(ctx, memo.NotionPageID); err != nil {
@@ -172,6 +205,16 @@ func (s *MemoService) purgeMemo(ctx context.Context, memo domain.Memo) error {
 // SetKeepLocal pins a memo against retention eviction.
 func (s *MemoService) SetKeepLocal(id string, keep bool) error {
 	if err := s.store.SetKeepLocal(contextBackground(), id, keep); err != nil {
+		return err
+	}
+	s.changed(id)
+	return nil
+}
+
+// SetPinned moves a memo to the top of the timeline. Pinning is local-only and
+// does not create a new revision or a sync change.
+func (s *MemoService) SetPinned(id string, pinned bool) error {
+	if err := s.store.SetPinned(contextBackground(), id, pinned); err != nil {
 		return err
 	}
 	s.changed(id)

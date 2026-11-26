@@ -8,15 +8,12 @@ English | [简体中文](README.md)
 
 ![memo main window](https://file%2B.vscode-resource.vscode-cdn.net/d%3A/dev/memo/docs/screenshots/timeline.png)
 
-Notes, search, tags and statistics live in local SQLite and work offline; Notion is  
-an optional long-term archive.
-
 ## Features
 
-- Write immediately: `Enter` saves, `Shift+Enter` adds a paragraph
+- Write immediately: `Enter` saves, `Shift+Enter` adds a paragraph; Markdown live preview
 - Global quick capture with `Ctrl+Shift+Space`, `Esc` hides it
-- Markdown live preview, tags, attachments and local search
-- Trash, tray-first window and single instance
+- Tags, attachments, local search, statistics, pinning, trash (auto-purged after 30 days)
+- Tray-first, single instance; data in local SQLite, works offline
 - Optional Notion archive with schema checks, sync pause and body retention
 
 | Edit a memo | Quick capture |
@@ -27,59 +24,38 @@ an optional long-term archive.
 
 ## Download
 
-Latest: [**Releases**](https://github.com/olianate/memo/releases/latest)
+[Latest release](https://github.com/olianate/memo/releases/latest)
 
-| Platform | Package |
-| --- | --- |
-| Windows x64 | [memo-windows-amd64.msi](https://github.com/olianate/memo/releases/latest/download/memo-windows-amd64.msi) (recommended) |
-| Windows x64 | [memo-windows-amd64-installer.exe](https://github.com/olianate/memo/releases/latest/download/memo-windows-amd64-installer.exe) |
-| macOS Intel / Apple Silicon | [memo-macos-universal.dmg](https://github.com/olianate/memo/releases/latest/download/memo-macos-universal.dmg) |
+- Windows x64: [MSI](https://github.com/olianate/memo/releases/latest/download/memo-windows-amd64.msi) (recommended) / [NSIS installer](https://github.com/olianate/memo/releases/latest/download/memo-windows-amd64-installer.exe)
+- macOS Intel / Apple Silicon: [Universal DMG](https://github.com/olianate/memo/releases/latest/download/memo-macos-universal.dmg)
 
-The builds are unsigned and not notarized; on first launch use SmartScreen  
-"More info → Run anyway", or right-click → Open on macOS. Windows needs WebView2,  
-macOS needs 12+.
+Builds are unsigned: on first launch use SmartScreen "More info → Run anyway" on Windows, or right-click → Open on macOS. Windows needs WebView2; macOS needs 12+.
 
 ## Usage
 
-1. Write in the composer; type `#tag` to attach a tag. Click a card to edit its body, tags and attachments, or move it to the trash.
-2. Closing the main window leaves memo in the tray; left-click the tray icon to restore.
+Write in the composer and type `#tag` to add a tag; click a card to edit its body, tags and attachments, or move it to the trash. Closing the main window leaves memo in the tray; left-click the tray icon to restore.
 
-Data lives in `%APPDATA%\memo` on Windows and `~/Library/Application Support/memo` on  
-macOS. Uninstalling keeps it; use **Settings → Delete all local data** to remove it.
+Data lives in `%APPDATA%\memo` on Windows and `~/Library/Application Support/memo` on macOS. Uninstalling keeps it; use **Settings → Delete all local data** to remove it. If startup fails, memo shows a native dialog and writes `logs/memo.log`.
 
 ## Notion (optional)
 
-Create a Notion integration and share the target page or database with it, then paste  
-the token in **Settings → Connect Notion** and pick the target. Existing databases are  
-schema-checked: missing properties are added after confirmation, type conflicts block  
-the connection. The token is stored in the OS keychain, never in SQLite or logs.
-
-See [`docs/development.md`](docs/development.md) for details.
+Create an integration and share the target page or database with it, then paste the token in **Settings → Connect Notion**. The token is stored in the OS keychain, never in SQLite or logs; see [`docs/development.md`](docs/development.md) for details.
 
 ## Build
 
-Requires Go 1.26+, Node.js 24+ and the Wails v3 CLI  
-(`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0`). Windows MSI needs  
-WiX 3.14, the NSIS package needs NSIS, and macOS needs Xcode Command Line Tools.
+Requires Go 1.26+, Node.js 24+ and the Wails v3 CLI (`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0`); packaging MSI / NSIS / DMG additionally needs WiX 3.14 / NSIS / Xcode Command Line Tools.
 
 ```bash
-go test ./internal/...
+go test ./internal/... ./tools/...
 ( cd frontend && npm ci && npm test && npx tsc --noEmit )
 
 wails3 dev     # hot reload
-wails3 build   # production build, embeds frontend/dist
+wails3 build   # production build
 ```
-
-Packaging and release (MSI / NSIS / DMG, `SHA256SUMS.txt`, the `v*` tag-triggered  
-workflow) are documented in [`docs/development.md`](docs/development.md).
 
 ## Docs
 
-- [`docs/development.md`](docs/development.md): implementation, Notion behavior and packaging
-- [`GLOSSARY.md`](GLOSSARY.md): domain vocabulary
-- [`docs/adr/`](docs/adr/): architecture decisions
-- [`SMOKE.md`](SMOKE.md): manual release checklist
-- [`NOTICE`](NOTICE): third-party components and licenses
+Development and packaging: [`docs/development.md`](docs/development.md); releasing: [`docs/releasing.md`](docs/releasing.md). Also see the [glossary](GLOSSARY.md), [architecture decisions](docs/adr/), [release checklist](SMOKE.md) and [third-party notices](NOTICE).
 
 ## License
 

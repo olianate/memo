@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { AtomicCodeMirrorEditor, type AtomicCodeMirrorEditorHandle } from "@atomic-editor/editor";
 import "@atomic-editor/editor/styles.css";
 import { Prec, type Extension } from "@codemirror/state";
@@ -8,7 +9,7 @@ import type { MarkdownEditorBackend } from "../backend";
 import { blockText, blocksFromMarkdown, safeLinkUrl } from "../lib/markdown";
 import { extractTagToken, normalizeTag, removeTagToken, type TagToken } from "../lib/tag";
 import { countWords, humanBytes } from "../lib/format";
-import { CloseIcon, FileIcon, ImageIcon, PaperclipIcon } from "./Icons";
+import { CloseIcon, FileIcon, ImageIcon, PaperclipIcon, TagIcon } from "./Icons";
 
 interface EditorProps {
   backend: MarkdownEditorBackend;
@@ -24,6 +25,8 @@ interface EditorProps {
   compact?: boolean;
   placeholder?: string;
   disabled?: boolean;
+  toolsInFooter?: boolean;
+  footerHint?: ReactNode;
   onAddAttachment?: (files: File[]) => void;
   onRemoveAttachment?: (id: string) => void;
 }
@@ -65,6 +68,8 @@ export function MarkdownEditor({
   compact = false,
   placeholder = "记录此刻的想法… 支持 Markdown",
   disabled = false,
+  toolsInFooter = false,
+  footerHint,
   onAddAttachment,
   onRemoveAttachment,
 }: EditorProps) {
@@ -391,8 +396,33 @@ export function MarkdownEditor({
     onAddAttachmentRef.current(files);
   };
 
+  const attachControl = onAddAttachment ? (
+    <>
+      <button
+        type="button"
+        className="tool-btn"
+        title="添加图片或文件"
+        aria-label="添加图片或文件"
+        onClick={() => fileInput.current?.click()}
+      >
+        <PaperclipIcon size={16} />
+      </button>
+      <input
+        ref={fileInput}
+        type="file"
+        multiple
+        className="file-input"
+        onChange={(event) => {
+          handleFiles(Array.from(event.target.files ?? []));
+          event.target.value = "";
+        }}
+      />
+    </>
+  ) : null;
+
   const tagRow = (
     <div className="tag-row tag-row-editor">
+      {toolsInFooter && attachControl}
       {tags.map((tag) => (
         <span className="tag-chip" key={tag}>
           #{tag}
@@ -427,11 +457,18 @@ export function MarkdownEditor({
           }}
         />
       ) : (
-        <button type="button" className="tag-add" onClick={() => setAddingTag(true)}>
-          + 标签
+        <button
+          type="button"
+          className={toolsInFooter ? "tag-add tag-add-icon" : "tag-add"}
+          onClick={() => setAddingTag(true)}
+          aria-label={toolsInFooter ? "添加标签" : undefined}
+          title={toolsInFooter ? "添加标签" : undefined}
+        >
+          {toolsInFooter ? <TagIcon size={15} /> : "+ 标签"}
         </button>
       )}
       <span className="tag-hint">#标签 直接转换</span>
+      {toolsInFooter && footerHint && <span className="composer-hint">{footerHint}</span>}
     </div>
   );
 
@@ -447,36 +484,14 @@ export function MarkdownEditor({
       onDragLeave={() => setDragging(false)}
       onDrop={() => setDragging(false)}
     >
-      <div className="editor-toolbar" role="toolbar" aria-label="Markdown 工具栏">
-        <span className="editor-mode-label">Markdown</span>
-        <div className="toolbar-group toolbar-spacer">
-          {onAddAttachment && (
-            <>
-              <button
-                type="button"
-                className="tool-btn"
-                title="添加图片或文件"
-                aria-label="添加图片或文件"
-                onClick={() => fileInput.current?.click()}
-              >
-                <PaperclipIcon size={16} />
-              </button>
-              <input
-                ref={fileInput}
-                type="file"
-                multiple
-                className="file-input"
-                onChange={(event) => {
-                  handleFiles(Array.from(event.target.files ?? []));
-                  event.target.value = "";
-                }}
-              />
-            </>
-          )}
+      {!toolsInFooter && (
+        <div className="editor-toolbar" role="toolbar" aria-label="Markdown 工具栏">
+          <span className="editor-mode-label">Markdown</span>
+          <div className="toolbar-group toolbar-spacer">{attachControl}</div>
         </div>
-      </div>
+      )}
 
-      {tagRow}
+      {!toolsInFooter && tagRow}
 
       <div className="atomic-editor-shell" ref={shellRef}>
         <AtomicCodeMirrorEditor
@@ -491,6 +506,8 @@ export function MarkdownEditor({
           extensions={extensions}
         />
       </div>
+
+      {toolsInFooter && tagRow}
 
       <div className="editor-word-count" aria-label={`字数 ${wordCount}`}>
         字数 {wordCount}

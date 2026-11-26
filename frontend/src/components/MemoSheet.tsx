@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import type { Attachment, Memo } from "../types";
 import type { MemoSheetBackend } from "../backend";
 import { MarkdownEditor } from "./MarkdownEditor";
-import { formatDate } from "../lib/format";
+import { formatDate, formatTime } from "../lib/format";
 import { fileToBase64 } from "../lib/files";
-import { CloseIcon, PinIcon, TrashIcon } from "./Icons";
+import { CloseIcon, LockIcon, PinIcon, TrashIcon } from "./Icons";
 import { StatusBadge } from "./common";
 
 export function MemoSheet({
@@ -14,6 +14,7 @@ export function MemoSheet({
   onChanged,
   onError,
   submitOnEnter = true,
+  inline = false,
 }: {
   memo: Memo;
   backend: MemoSheetBackend;
@@ -21,11 +22,13 @@ export function MemoSheet({
   onChanged: (memo: Memo | null) => void;
   onError: (message: string) => void;
   submitOnEnter?: boolean;
+  inline?: boolean;
 }) {
   const [body, setBody] = useState(memo.body ?? "");
   const [tags, setTags] = useState<string[]>((memo.tags ?? []).map((t) => t.name));
   const [attachments, setAttachments] = useState<Attachment[]>(memo.attachments ?? []);
   const [keepLocal, setKeepLocal] = useState(memo.keep_local);
+  const [pinned, setPinned] = useState(memo.pinned);
   const [deleted, setDeleted] = useState(memo.deleted);
   const [saving, setSaving] = useState(false);
   const [purging, setPurging] = useState(false);
@@ -40,6 +43,7 @@ export function MemoSheet({
     setTags((memo.tags ?? []).map((t) => t.name));
     setAttachments(memo.attachments ?? []);
     setKeepLocal(memo.keep_local);
+    setPinned(memo.pinned);
     setDeleted(memo.deleted);
     setEvicted(memo.local_state === "evicted");
   }, [memo.id, memo.revision, memo.local_state]);
@@ -57,6 +61,8 @@ export function MemoSheet({
     setBody(fresh.body ?? "");
     setTags((fresh.tags ?? []).map((t) => t.name));
     setAttachments(fresh.attachments ?? []);
+    setKeepLocal(fresh.keep_local);
+    setPinned(fresh.pinned);
     setDeleted(fresh.deleted);
     setEvicted(fresh.local_state === "evicted");
     onChanged(fresh);
@@ -130,11 +136,23 @@ export function MemoSheet({
     }
   };
 
-  const pin = async () => {
+  const toggleKeepLocal = async () => {
     const next = !keepLocal;
     setKeepLocal(next);
     try {
       await backend.setKeepLocal(memo.id, next);
+      const fresh = await backend.get(memo.id);
+      onChanged(fresh);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const togglePinned = async () => {
+    const next = !pinned;
+    setPinned(next);
+    try {
+      await backend.setPinned(memo.id, next);
       const fresh = await backend.get(memo.id);
       onChanged(fresh);
     } catch (e) {
@@ -162,9 +180,27 @@ export function MemoSheet({
     }
   };
 
-  return (
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-modal="true" aria-label="编辑笔记" onClick={(e) => e.stopPropagation()}>
+  const created = new Date(memo.created_at);
+  const weekday = ["日", "一", "二", "三", "四", "五", "六"][created.getDay()];
+  const readerTitle = `${created.getMonth() + 1}月${created.getDate()}日 星期${weekday}`;
+  const readerState = deleted
+    ? "回收站"
+    : evicted
+      ? "正文已清理"
+      : memo.sync_error
+        ? "同步失败"
+        : memo.notion_synced_at
+          ? "已同步"
+          : "仅本地";
+
+  const panel = (
+    <div
+      className="sheet"
+      role="dialog"
+      aria-modal
+      aria-label="编辑笔记"
+      onClick={(e) => e.stopPropagation()}
+    >
         <header className="sheet-header">
           <div>
             <h2>{deleted ? "回收站中的笔记" : "编辑笔记"}</h2>
@@ -176,8 +212,23 @@ export function MemoSheet({
           </div>
           <div className="sheet-actions">
             <StatusBadge memo={{ ...memo, deleted }} />
-            <button type="button" className={`icon-button ${keepLocal ? "is-on" : ""}`} onClick={() => void pin()} title="保留本地" aria-label="保留本地">
+            <button
+              type="button"
+              className={`icon-button ${pinned ? "is-on" : ""}`}
+              onClick={() => void togglePinned()}
+              title={pinned ? "取消置顶" : "置顶"}
+              aria-label={pinned ? "取消置顶" : "置顶"}
+            >
               <PinIcon size={17} />
+            </button>
+            <button
+              type="button"
+              className={`icon-button ${keepLocal ? "is-on" : ""}`}
+              onClick={() => void toggleKeepLocal()}
+              title={keepLocal ? "取消保留本地" : "保留本地"}
+              aria-label={keepLocal ? "取消保留本地" : "保留本地"}
+            >
+              <LockIcon size={17} />
             </button>
             <button
               type="button"
@@ -223,10 +274,16 @@ export function MemoSheet({
             </div>
             {error && <div className="inline-error sheet-error">{error}</div>}
             <footer className="sheet-footer">
-              <label className="checkbox-row">
-                <input type="checkbox" checked={keepLocal} onChange={() => void pin()} />
-                <span>保留本地（不参与清理）</span>
-              </label>
+              <div className="sheet-toggles">
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={pinned} onChange={() => void togglePinned()} />
+                  <span>置顶（显示在最前）</span>
+                </label>
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={keepLocal} onChange={() => void toggleKeepLocal()} />
+                  <span>保留本地（不参与清理）</span>
+                </label>
+              </div>
               <div className="sheet-footer-actions">
                 {deleted ? (
                   <>
@@ -255,6 +312,125 @@ export function MemoSheet({
           </>
         )}
       </div>
+  );
+
+  if (inline) {
+    return (
+      <div className="reader-page" aria-label="编辑笔记">
+        <div className="reader-top">
+          <button type="button" className="reader-back" onClick={onClose}>
+            <span aria-hidden="true">←</span> 时间线
+          </button>
+          <div className="reader-actions">
+            <button
+              type="button"
+              className={`icon-button ${pinned ? "is-on" : ""}`}
+              onClick={() => void togglePinned()}
+              title={pinned ? "取消置顶" : "置顶"}
+              aria-label={pinned ? "取消置顶" : "置顶"}
+            >
+              <PinIcon size={15} />
+            </button>
+            <button
+              type="button"
+              className={`icon-button ${keepLocal ? "is-on" : ""}`}
+              onClick={() => void toggleKeepLocal()}
+              title={keepLocal ? "取消保留本地" : "保留本地"}
+              aria-label={keepLocal ? "取消保留本地" : "保留本地"}
+            >
+              <LockIcon size={15} />
+            </button>
+            <button
+              type="button"
+              className="icon-button danger"
+              onClick={() => void (deleted ? purge() : remove())}
+              title={deleted ? "永久删除" : "删除"}
+              aria-label={deleted ? "永久删除" : "删除"}
+              disabled={purging}
+            >
+              <TrashIcon size={15} />
+            </button>
+          </div>
+        </div>
+        <div className="reader-meta">
+          <span>
+            {readerTitle} · {formatTime(memo.created_at)}
+          </span>
+          <span className="dot" aria-hidden="true" />
+          <span>{readerState}</span>
+        </div>
+
+        {evicted ? (
+          <div className="hydrate-panel">
+            <h3>正文已从本地清理</h3>
+            <p>元数据、标签和搜索索引仍然在。打开这条笔记会从 Notion 重新取回正文与附件。</p>
+            <button type="button" className="primary-button" onClick={() => void hydrate()} disabled={hydrating}>
+              {hydrating ? "正在恢复…" : "从 Notion 恢复"}
+            </button>
+            {error && <div className="inline-error">{error}</div>}
+          </div>
+        ) : (
+          <>
+            <div className="reader-body">
+              <MarkdownEditor
+                backend={backend}
+                body={body}
+                tags={tags}
+                attachments={attachments}
+                onBodyChange={setBody}
+                onTagsChange={setTags}
+                onSubmit={() => void save()}
+                submitOnEnter={submitOnEnter}
+                autoFocus
+                toolsInFooter
+                onAddAttachment={(files) => void addFiles(files)}
+                onRemoveAttachment={(id) => void removeAttachment(id)}
+              />
+            </div>
+            {error && <div className="inline-error sheet-error">{error}</div>}
+            <div className="reader-foot">
+              <span>
+                {deleted
+                  ? "删除于 " + formatDate(memo.deleted_at ?? memo.updated_at)
+                  : `最后编辑 ${formatTime(memo.updated_at)} · 自动保存到本地`}
+              </span>
+              <div className="reader-foot-actions">
+                {deleted ? (
+                  <>
+                    <button type="button" className="secondary-button small" onClick={() => void restore()}>
+                      恢复
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button small danger"
+                      onClick={() => void purge()}
+                      disabled={purging}
+                    >
+                      {purging ? "删除中…" : "永久删除"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="reader-save"
+                    onClick={() => void save()}
+                    disabled={saving}
+                    aria-label="保存笔记"
+                  >
+                    {saving ? "保存中…" : "保存"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      {panel}
     </div>
   );
 }

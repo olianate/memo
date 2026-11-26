@@ -97,8 +97,12 @@ Run before calling a build releasable. Use a disposable profile:
 - [ ] Export backup writes `backups/backup-<timestamp>/memo.db` + attachments.
 - [ ] Restore that backup into a disposable profile: a memo containing blank
       lines and trailing spaces comes back byte for byte.
-- [ ] Try to open a block-AST-era profile: startup is refused with a clear reset
-      message, not an empty timeline.
+- [ ] Try to open a block-AST-era profile: a native dialog explains that the
+      profile is incompatible, points at `logs/memo.log`, and the process exits
+      instead of vanishing; no empty timeline is created.
+- [ ] Start with an unusable data directory (for example `MEMO_DATA_DIR` pointing
+      at a file): a native error dialog appears and the startup log can be found
+      under the system temp directory.
 - [ ] Export logs writes a redacted sync log.
 - [ ] `删除全部本地数据` asks for confirmation, wipes local memos, and turns sync
       off (Notion archive untouched).

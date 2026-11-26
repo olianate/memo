@@ -37,6 +37,7 @@ export interface Backend {
   purgeMemo(id: string): Promise<void>;
   emptyTrash(): Promise<number>;
   setKeepLocal(id: string, keep: boolean): Promise<void>;
+  setPinned(id: string, pinned: boolean): Promise<void>;
   hydrate(id: string): Promise<Memo>;
   addAttachmentBase64(memoId: string, name: string, mime: string, data: string): Promise<Attachment>;
   addAttachments(memoId: string, files: AttachmentPayload[]): Promise<Attachment[]>;
@@ -105,7 +106,10 @@ export type MarkdownEditorBackend = Pick<
   Backend,
   "attachmentData" | "attachmentThumb" | "openAttachment" | "openURL" | "suggestTags"
 >;
-export type MemoListBackend = Pick<Backend, "list" | "remove" | "purgeMemo" | "setKeepLocal"> &
+export type MemoListBackend = Pick<
+  Backend,
+  "list" | "remove" | "purgeMemo" | "setKeepLocal" | "setPinned"
+> &
   MarkdownEditorBackend;
 export type MemoDraftBackend = Pick<
   Backend,
@@ -121,6 +125,7 @@ export type MemoSheetBackend = Pick<
   | "purgeMemo"
   | "restore"
   | "setKeepLocal"
+  | "setPinned"
   | "addAttachments"
   | "removeAttachment"
 > &

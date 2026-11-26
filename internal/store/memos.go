@@ -106,7 +106,7 @@ func (s *Store) UpdateMemoDerived(ctx context.Context, id string, body string, t
 	return s.GetMemo(ctx, id)
 }
 
-// UpdateMemoMetadata edits tags and the pin flag while leaving the body
+// UpdateMemoMetadata edits tags and the keep-local flag while leaving the body
 // untouched, so an evicted memo stays evicted and a metadata-only edit costs no
 // re-derivation. It still bumps the revision: tags are synced properties.
 func (s *Store) UpdateMemoMetadata(ctx context.Context, id string, tags []string, keepLocal bool) (*domain.Memo, error) {
@@ -322,9 +322,24 @@ func (s *Store) DeletedMemos(ctx context.Context) ([]domain.Memo, error) {
 	}
 }
 
-// SetKeepLocal pins or unpins a memo without bumping its revision.
+// SetKeepLocal marks a memo to be excluded from retention eviction without
+// bumping its revision.
 func (s *Store) SetKeepLocal(ctx context.Context, id string, keep bool) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE memos SET keep_local=? WHERE id=?`, boolInt(keep), id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+// SetPinned moves a memo to the top of the timeline (or back) without bumping
+// its revision. Pinning is a local-only preference and is never synced.
+func (s *Store) SetPinned(ctx context.Context, id string, pinned bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE memos SET pinned=? WHERE id=?`, boolInt(pinned), id)
 	if err != nil {
 		return err
 	}
@@ -369,10 +384,10 @@ type memoScanner interface {
 func scanMemoRow(sc memoScanner) (*domain.Memo, error) {
 	var m domain.Memo
 	var created, updated, deleted, synced, hydrated sql.NullInt64
-	var keepLocal int
+	var keepLocal, pinned int
 	var state, blockStats string
 	if err := sc.Scan(&m.ID, &created, &updated, &m.Revision, &m.Body, &m.BodyText, &m.Snippet,
-		&deleted, &keepLocal, &state, &m.NotionPageID, &synced, &hydrated, &m.BaseRevision, &m.ContentHash, &m.SyncError, &blockStats); err != nil {
+		&deleted, &keepLocal, &pinned, &state, &m.NotionPageID, &synced, &hydrated, &m.BaseRevision, &m.ContentHash, &m.SyncError, &blockStats); err != nil {
 		return nil, err
 	}
 	m.CreatedAt = fromMS(created.Int64)
@@ -381,6 +396,7 @@ func scanMemoRow(sc memoScanner) (*domain.Memo, error) {
 	m.NotionSyncedAt = msPtr(synced)
 	m.LastHydratedAt = msPtr(hydrated)
 	m.KeepLocal = keepLocal == 1
+	m.Pinned = pinned == 1
 	m.LocalState = domain.LocalState(state)
 	m.BlockStats = domain.UnmarshalBlockStats(blockStats)
 	m.Tags = []domain.Tag{}
@@ -510,7 +526,7 @@ func (s *Store) ListMemos(ctx context.Context, f MemoFilter) ([]domain.Memo, err
 		limit = 500
 	}
 	q := `SELECT ` + memoColumns + ` FROM memos m WHERE ` + strings.Join(where, " AND ") +
-		` ORDER BY m.created_at DESC, m.id DESC LIMIT ? OFFSET ?`
+		` ORDER BY m.pinned DESC, m.created_at DESC, m.id DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, f.Offset)
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
