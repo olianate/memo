@@ -263,10 +263,11 @@ timeline.
 ### GitHub Actions
 
 `.github/workflows/ci.yml` runs on every push to `main` and on every pull
-request: `gofmt`, `go test ./internal/... ./tools/...`, `go vet ./...`,
-`go run ./tools/release check`, `npx tsc --noEmit` and `npm test`, then builds
-the frontend and compile-checks the Windows app. It is also the single
-definition of the test steps, so release jobs call it as a reusable workflow.
+request: `gofmt`, `go test ./internal/... ./tools/...`, `go vet` against the
+Windows target, `go run ./tools/release check`, `npx tsc --noEmit` and
+`npm test`, then builds the frontend and compile-checks the Windows app. It is
+also the single definition of the test steps, so release jobs call it as a
+reusable workflow.
 
 `.github/workflows/release.yml` runs on `v[0-9]*` tags. Its `preflight` job
 derives the version from the tag, requires the tag commit to be on `main`,
