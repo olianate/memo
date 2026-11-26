@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import wails from "@wailsio/runtime/plugins/vite";
+import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // https://vitejs.dev/config/
@@ -20,6 +21,15 @@ export default defineConfig({
       apply: "serve",
       transformIndexHtml(html: string) {
         return html.replace("script-src 'self'", "script-src 'self' 'unsafe-inline'");
+      },
+    },
+    {
+      // main.go embeds frontend/dist. Vite empties that folder on every build,
+      // so put the tracked placeholder back for a clean working tree.
+      name: "embed-placeholder",
+      apply: "build",
+      closeBundle() {
+        writeFileSync(fileURLToPath(new URL("./dist/.gitkeep", import.meta.url)), "");
       },
     },
   ],
