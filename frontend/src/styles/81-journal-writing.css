@@ -248,17 +248,14 @@
 }
 
 .day-header {
-  position: sticky;
-  top: 52px;
-  z-index: 5;
+  position: static;
   display: flex;
   align-items: baseline;
   gap: 10px;
   margin: 0;
   padding: 20px 0 8px;
   border: 0;
-  background: color-mix(in srgb, var(--paper) 94%, transparent);
-  backdrop-filter: blur(8px);
+  background: transparent;
   box-shadow: none;
 }
 
