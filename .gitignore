@@ -23,6 +23,12 @@ docs/agents/
 docs/prototypes/
 skills-lock.json
 
+# main.go embeds frontend/dist at compile time. Keep the folder present in a
+# fresh checkout so go vet and go build work before the frontend is built.
+!frontend/dist/
+frontend/dist/*
+!frontend/dist/.gitkeep
+
 # The vendored Wails CLI embeds its setup-wizard frontend at compile time.
 !third_party/wails/internal/setupwizard/frontend/dist/
 !third_party/wails/internal/setupwizard/frontend/dist/**
