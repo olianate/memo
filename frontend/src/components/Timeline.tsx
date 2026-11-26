@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { Attachment, Memo } from "../types";
 import type { MemoListBackend } from "../backend";
 import { BlockPreview } from "../lib/markdown";
@@ -52,9 +52,36 @@ export function Timeline({
   emptyHint?: string;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const shadeRef = useRef<HTMLDivElement>(null);
 
   const groups = useMemo(() => groupByDay(memos), [memos]);
   const today = localIso(new Date());
+
+  // Once the timeline reaches the top bar, paint an opaque band behind the
+  // sticky day headers so entries scrolled underneath can never show through.
+  useEffect(() => {
+    const scroller = document.querySelector<HTMLElement>(".content");
+    const shade = shadeRef.current;
+    if (!scroller || !shade) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const stuck = shade.getBoundingClientRect().top <= 53;
+      timelineRef.current?.classList.toggle("is-past-top", stuck);
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [groups.length]);
 
   const toggle = (id: string) => {
     setExpanded((prev) => {
@@ -111,12 +138,13 @@ export function Timeline({
   }
 
   return (
-    <div className="timeline">
+    <div className="timeline" ref={timelineRef}>
+      <div className="timeline-shade" ref={shadeRef} aria-hidden="true" />
       {groups.map((group) => {
         const label = dayLabel(group.day);
         const isToday = group.day === today;
         return (
-          <section className="day-group" key={group.day}>
+          <Fragment key={group.day}>
             {!isToday && (
               <div className="day-header">
                 <h3>{label.title}</h3>
@@ -125,22 +153,24 @@ export function Timeline({
                 <em>{group.memos.length} 条</em>
               </div>
             )}
-            {group.memos.map((memo) => (
-              <MemoCard
-                key={memo.id}
-                memo={memo}
-                backend={backend}
-                open={expanded.has(memo.id)}
-                onToggle={() => toggle(memo.id)}
-                onOpen={() => onOpen(memo)}
-                onTag={onTag}
-                onError={onError}
-                onRemove={() => void remove(memo)}
-                onPin={() => void togglePin(memo)}
-                onKeepLocal={() => void toggleKeepLocal(memo)}
-              />
-            ))}
-          </section>
+            <section className="day-group">
+              {group.memos.map((memo) => (
+                <MemoCard
+                  key={memo.id}
+                  memo={memo}
+                  backend={backend}
+                  open={expanded.has(memo.id)}
+                  onToggle={() => toggle(memo.id)}
+                  onOpen={() => onOpen(memo)}
+                  onTag={onTag}
+                  onError={onError}
+                  onRemove={() => void remove(memo)}
+                  onPin={() => void togglePin(memo)}
+                  onKeepLocal={() => void toggleKeepLocal(memo)}
+                />
+              ))}
+            </section>
+          </Fragment>
         );
       })}
     </div>
