@@ -761,6 +761,11 @@ button {
   color: var(--accent);
 }
 
+.tagline .tag-more {
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
 .tagline span {
   color: var(--faint);
   font-size: 11px;

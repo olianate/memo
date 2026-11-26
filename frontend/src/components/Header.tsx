@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Counts, DayCount, SyncStatus, Tag, ViewId } from "../types";
 import { relativeTime } from "../lib/format";
@@ -272,6 +272,13 @@ export function JournalFilters({
   onView: (view: ViewId) => void;
   onTag: (tag: string) => void;
 }) {
+  const [allTags, setAllTags] = useState(false);
+  const tagLimit = 6;
+  const baseTags = allTags ? tags : tags.slice(0, tagLimit);
+  const active = tags.find((tag) => tag.name === activeTag);
+  const visibleTags = active && !baseTags.some((tag) => tag.id === active.id) ? [...baseTags, active] : baseTags;
+  const hiddenTags = tags.length - visibleTags.length;
+
   return (
     <div className="journal-filters">
       <div className="filters-row" aria-label="筛选">
@@ -293,7 +300,7 @@ export function JournalFilters({
       </div>
 
       <div className="tagline" aria-label="标签">
-        {tags.map((tag) => (
+        {visibleTags.map((tag) => (
           <button
             type="button"
             key={tag.id}
@@ -305,6 +312,21 @@ export function JournalFilters({
             {tag.name}
           </button>
         ))}
+        {hiddenTags > 0 && (
+          <button
+            type="button"
+            className="tag-more"
+            onClick={() => setAllTags(true)}
+            aria-expanded={false}
+          >
+            更多 {hiddenTags}
+          </button>
+        )}
+        {allTags && tags.length > tagLimit && (
+          <button type="button" className="tag-more" onClick={() => setAllTags(false)} aria-expanded>
+            收起
+          </button>
+        )}
         {tags.length === 0 && <span>还没有标签</span>}
       </div>
     </div>
